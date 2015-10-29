@@ -22,8 +22,6 @@ my $notified = $worker->info->{notified};
 like $notified, qr/^[\d.]+$/, 'has timestamp';
 my $id = $worker->id;
 is $worker->register->id, $id, 'same id';
-sleep 1;
-cmp_ok $worker->register->info->{notified}, '>', $notified, 'new timestamp';
 is $worker->unregister->info, undef, 'no information';
 my $host = hostname;
 is $worker->register->info->{host}, $host, 'right host';
