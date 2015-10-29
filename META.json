@@ -45,6 +45,9 @@
             "Sys::Hostname" : "0",
             "Time::HiRes" : "0",
             "perl" : "5.010001"
+         },
+         "suggests" : {
+            "Mojo::JSON::MaybeXS" : "0"
          }
       },
       "test" : {
