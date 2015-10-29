@@ -38,17 +38,18 @@
       },
       "runtime" : {
          "requires" : {
-            "DBI" : "0",
+            "DBI" : "0.88",
             "Minion" : "2.05",
             "Mojo::SQLite" : "0.018",
             "Mojolicious" : "6.0",
+            "Sys::Hostname" : "0",
+            "Time::HiRes" : "0",
             "perl" : "5.010001"
          }
       },
       "test" : {
          "requires" : {
-            "Test::More" : "0.88",
-            "Time::HiRes" : "0"
+            "Test::More" : "0.88"
          }
       }
    },

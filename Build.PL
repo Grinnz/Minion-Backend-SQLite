@@ -82,22 +82,22 @@ EOW
       "module_name" => "Minion::Backend::SQLite",
       "recursive_test_files" => 1,
       "requires" => {
-        "DBI" => 0,
+        "DBI" => "0.88",
         "Minion" => "2.05",
         "Mojo::SQLite" => "0.018",
         "Mojolicious" => "6.0",
+        "Sys::Hostname" => 0,
+        "Time::HiRes" => 0,
         "perl" => "5.010001"
       },
       "test_requires" => {
-        "Test::More" => "0.88",
-        "Time::HiRes" => 0
+        "Test::More" => "0.88"
       }
     );
 
 
     my %fallback_build_requires = (
-      "Test::More" => "0.88",
-      "Time::HiRes" => 0
+      "Test::More" => "0.88"
     );
 
 
