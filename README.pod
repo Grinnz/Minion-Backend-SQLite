@@ -1,0 +1,404 @@
+=pod
+
+=encoding utf8
+
+=head1 NAME
+
+Minion::Backend::SQLite - SQLite backend for Minion job queue
+
+=head1 SYNOPSIS
+
+  use Minion::Backend::SQLite;
+
+  my $backend = Minion::Backend::SQLite->new('sqlite:test.db');
+
+=head1 DESCRIPTION
+
+L<Minion::Backend::SQLite> is a backend for L<Minion> based on L<Mojo::SQLite>.
+All necessary tables will be created automatically with a set of migrations
+named C<minion>.
+
+=head1 ATTRIBUTES
+
+L<Minion::Backend::SQLite> inherits all attributes from L<Minion::Backend> and
+implements the following new ones.
+
+=head2 sqlite
+
+  my $sqlite = $backend->sqlite;
+  $backend   = $backend->sqlite(Mojo::SQLite->new);
+
+L<Mojo::SQLite> object used to store all data.
+
+=head1 METHODS
+
+L<Minion::Backend::SQLite> inherits all methods from L<Minion::Backend> and
+implements the following new ones.
+
+=head2 new
+
+  my $backend = Minion::Backend::SQLite->new('sqlite:test.db');
+  my $backend = Minion::Backend::SQLite->new->tap(sub { $_->sqlite->from_filename('C:\\foo\\bar.db') });
+
+Construct a new L<Minion::Backend::SQLite> object.
+
+=head2 dequeue
+
+  my $job_info = $backend->dequeue($worker_id, 0.5);
+  my $job_info = $backend->dequeue($worker_id, 0.5, {queues => ['important']});
+
+Wait for job, dequeue it and transition from C<inactive> to C<active> state or
+return C<undef> if queues were empty.
+
+These options are currently available:
+
+=over 2
+
+=item queues
+
+  queues => ['important']
+
+One or more queues to dequeue jobs from, defaults to C<default>.
+
+=back
+
+These fields are currently available:
+
+=over 2
+
+=item args
+
+  args => ['foo', 'bar']
+
+Job arguments.
+
+=item id
+
+  id => '10023'
+
+Job ID.
+
+=item retries
+
+  retries => 3
+
+Number of times job has been retried.
+
+=item task
+
+  task => 'foo'
+
+Task name.
+
+=back
+
+=head2 enqueue
+
+  my $job_id = $backend->enqueue('foo');
+  my $job_id = $backend->enqueue(foo => [@args]);
+  my $job_id = $backend->enqueue(foo => [@args] => {priority => 1});
+
+Enqueue a new job with C<inactive> state.
+
+These options are currently available:
+
+=over 2
+
+=item delay
+
+  delay => 10
+
+Delay job for this many seconds (from now).
+
+=item priority
+
+  priority => 5
+
+Job priority, defaults to C<0>.
+
+=item queue
+
+  queue => 'important'
+
+Queue to put job in, defaults to C<default>.
+
+=back
+
+=head2 fail_job
+
+  my $bool = $backend->fail_job($job_id, $retries);
+  my $bool = $backend->fail_job($job_id, $retries, 'Something went wrong!');
+  my $bool = $backend->fail_job(
+    $job_id, $retries, {msg => 'Something went wrong!'});
+
+Transition from C<active> to C<failed> state.
+
+=head2 finish_job
+
+  my $bool = $backend->finish_job($job_id, $retries);
+  my $bool = $backend->finish_job($job_id, $retries, 'All went well!');
+  my $bool = $backend->finish_job($job_id, $retries, {msg => 'All went well!'});
+
+Transition from C<active> to C<finished> state.
+
+=head2 job_info
+
+  my $job_info = $backend->job_info($job_id);
+
+Get information about a job or return C<undef> if job does not exist.
+
+  # Check job state
+  my $state = $backend->job_info($job_id)->{state};
+
+  # Get job result
+  my $result = $backend->job_info($job_id)->{result};
+
+These fields are currently available:
+
+=over 2
+
+=item args
+
+  args => ['foo', 'bar']
+
+Job arguments.
+
+=item created
+
+  created => 784111777
+
+Time job was created.
+
+=item delayed
+
+  delayed => 784111777
+
+Time job was delayed to.
+
+=item finished
+
+  finished => 784111777
+
+Time job was finished.
+
+=item priority
+
+  priority => 3
+
+Job priority.
+
+=item queue
+
+  queue => 'important'
+
+Queue name.
+
+=item result
+
+  result => 'All went well!'
+
+Job result.
+
+=item retried
+
+  retried => 784111777
+
+Time job has been retried.
+
+=item retries
+
+  retries => 3
+
+Number of times job has been retried.
+
+=item started
+
+  started => 784111777
+
+Time job was started.
+
+=item state
+
+  state => 'inactive'
+
+Current job state, usually C<active>, C<failed>, C<finished> or C<inactive>.
+
+=item task
+
+  task => 'foo'
+
+Task name.
+
+=item worker
+
+  worker => '154'
+
+Id of worker that is processing the job.
+
+=back
+
+=head2 list_jobs
+
+  my $batch = $backend->list_jobs($offset, $limit);
+  my $batch = $backend->list_jobs($offset, $limit, {state => 'inactive'});
+
+Returns the same information as L</"job_info"> but in batches.
+
+These options are currently available:
+
+=over 2
+
+=item state
+
+  state => 'inactive'
+
+List only jobs in this state.
+
+=item task
+
+  task => 'test'
+
+List only jobs for this task.
+
+=back
+
+=head2 list_workers
+
+  my $batch = $backend->list_workers($offset, $limit);
+
+Returns the same information as L</"worker_info"> but in batches.
+
+=head2 register_worker
+
+  my $worker_id = $backend->register_worker;
+  my $worker_id = $backend->register_worker($worker_id);
+
+Register worker or send heartbeat to show that this worker is still alive.
+
+=head2 remove_job
+
+  my $bool = $backend->remove_job($job_id);
+
+Remove C<failed>, C<finished> or C<inactive> job from queue.
+
+=head2 repair
+
+  $backend->repair;
+
+Repair worker registry and job queue if necessary.
+
+=head2 reset
+
+  $backend->reset;
+
+Reset job queue.
+
+=head2 retry_job
+
+  my $bool = $backend->retry_job($job_id, $retries);
+  my $bool = $backend->retry_job($job_id, $retries, {delay => 10});
+
+Transition from C<failed> or C<finished> state back to C<inactive>.
+
+These options are currently available:
+
+=over 2
+
+=item delay
+
+  delay => 10
+
+Delay job for this many seconds (from now).
+
+=item priority
+
+  priority => 5
+
+Job priority.
+
+=item queue
+
+  queue => 'important'
+
+Queue to put job in.
+
+=back
+
+=head2 stats
+
+  my $stats = $backend->stats;
+
+Get statistics for jobs and workers.
+
+=head2 unregister_worker
+
+  $backend->unregister_worker($worker_id);
+
+Unregister worker.
+
+=head2 worker_info
+
+  my $worker_info = $backend->worker_info($worker_id);
+
+Get information about a worker or return C<undef> if worker does not exist.
+
+  # Check worker host
+  my $host = $backend->worker_info($worker_id)->{host};
+
+These fields are currently available:
+
+=over 2
+
+=item host
+
+  host => 'localhost'
+
+Worker host.
+
+=item jobs
+
+  jobs => ['10023', '10024', '10025', '10029']
+
+Ids of jobs the worker is currently processing.
+
+=item notified
+
+  notified => 784111777
+
+Last time worker sent a heartbeat.
+
+=item pid
+
+  pid => 12345
+
+Process id of worker.
+
+=item started
+
+  started => 784111777
+
+Time worker was started.
+
+=back
+
+=head1 BUGS
+
+Report any issues on the public bugtracker.
+
+=head1 AUTHOR
+
+Dan Book <dbook@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+
+This software is Copyright (c) 2015 by Dan Book.
+
+This is free software, licensed under:
+
+  The Artistic License 2.0 (GPL Compatible)
+
+=head1 SEE ALSO
+
+L<Minion>, L<Mojo::SQLite>
+
+=cut
