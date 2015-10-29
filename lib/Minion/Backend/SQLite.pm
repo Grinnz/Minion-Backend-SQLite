@@ -193,7 +193,7 @@ sub _try {
   my $queues_in = join ',', ('?')x@$queues;
   my $tasks_in = join ',', ('?')x@$tasks;
   
-  my $tx = $db->begin('exclusive');
+  my $tx = $db->begin;
   my $res = $db->query(
     qq{select id from minion_jobs
        where delayed <= datetime('now') and queue in ($queues_in)
