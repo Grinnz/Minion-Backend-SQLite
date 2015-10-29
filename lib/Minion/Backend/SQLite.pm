@@ -2,7 +2,6 @@ package Minion::Backend::SQLite;
 use Mojo::Base 'Minion::Backend';
 
 use DBI ':sql_types';
-use Mojo::IOLoop;
 use Mojo::JSON qw(decode_json encode_json);
 use Mojo::SQLite;
 use Sys::Hostname 'hostname';
