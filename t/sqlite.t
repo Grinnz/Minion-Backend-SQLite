@@ -9,7 +9,7 @@ use Mojo::IOLoop;
 use Sys::Hostname 'hostname';
 use Time::HiRes qw(time usleep);
 
-my $minion = Minion->new(SQLite => 'sqlite::temp:');
+my $minion = Minion->new('SQLite');
 
 # Nothing to repair
 my $worker = $minion->repair->worker;

@@ -16,7 +16,8 @@ Minion::Backend::SQLite - SQLite backend for Minion job queue
 
 L<Minion::Backend::SQLite> is a backend for L<Minion> based on L<Mojo::SQLite>.
 All necessary tables will be created automatically with a set of migrations
-named C<minion>.
+named C<minion>. If no connection string or C<:temp:> is provided, the database
+will be created in a temporary directory.
 
 =head1 ATTRIBUTES
 
@@ -37,6 +38,8 @@ implements the following new ones.
 
 =head2 new
 
+  my $backend = Minion::Backend::SQLite->new;
+  my $backend = Minion::Backend::SQLite->new(':temp:');
   my $backend = Minion::Backend::SQLite->new('sqlite:test.db');
   my $backend = Minion::Backend::SQLite->new->tap(sub { $_->sqlite->from_filename('C:\\foo\\bar.db') });
 
