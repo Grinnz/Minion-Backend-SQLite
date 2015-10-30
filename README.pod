@@ -9,8 +9,14 @@ Minion::Backend::SQLite - SQLite backend for Minion job queue
 =head1 SYNOPSIS
 
   use Minion::Backend::SQLite;
-
   my $backend = Minion::Backend::SQLite->new('sqlite:test.db');
+
+  # Minion
+  use Minion;
+  my $minion = Minion->new(SQLite => 'sqlite:test.db');
+
+  # Mojolicious::Lite (via Mojolicious::Plugin::Minion)
+  plugin Minion => { SQLite => 'sqlite:test.db' };
 
 =head1 DESCRIPTION
 
