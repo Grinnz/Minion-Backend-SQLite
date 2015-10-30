@@ -39,7 +39,7 @@
       "runtime" : {
          "requires" : {
             "DBI" : "0.88",
-            "Minion" : "2.05",
+            "Minion" : "3.02",
             "Mojo::SQLite" : "0.018",
             "Mojolicious" : "6.0",
             "Sys::Hostname" : "0",
@@ -59,7 +59,7 @@
    "provides" : {
       "Minion::Backend::SQLite" : {
          "file" : "lib/Minion/Backend/SQLite.pm",
-         "version" : "0.001"
+         "version" : "0.002"
       }
    },
    "release_status" : "stable",
@@ -74,7 +74,7 @@
          "web" : "https://github.com/Grinnz/Minion-Backend-SQLite"
       }
    },
-   "version" : "0.001",
+   "version" : "0.002",
    "x_contributors" : [
       "Dan Book <grinnz@grinnz.com>"
    ]

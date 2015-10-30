@@ -32,10 +32,11 @@ sub enqueue {
 
   my $db = $self->sqlite->db;
   return $db->query(
-    q{insert into minion_jobs (args, delayed, priority, queue, task)
-      values (?, (datetime('now', ? || ' seconds')), ?, ?, ?)},
-    {type => SQL_BLOB, value => encode_json($args)}, $options->{delay} // 0,
-    $options->{priority} // 0, $options->{queue} // 'default', $task
+    q{insert into minion_jobs (args, attempts, delayed, priority, queue, task)
+      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?)},
+    {type => SQL_BLOB, value => encode_json($args)}, $options->{attempts} // 1,
+    $options->{delay} // 0, $options->{priority} // 0,
+    $options->{queue} // 'default', $task
   )->last_insert_id;
 }
 
@@ -44,7 +45,7 @@ sub finish_job { shift->_update(0, @_) }
 
 sub job_info {
   my $info = shift->sqlite->db->query(
-    q{select id, args, strftime('%s',created) as created,
+    q{select id, args, attempts, strftime('%s',created) as created,
         strftime('%s',delayed) as delayed,
         strftime('%s',finished) as finished, priority, queue, result,
         strftime('%s',retried) as retried, retries,
@@ -136,7 +137,7 @@ sub retry_job {
   return !!$self->sqlite->db->query(
     q{update minion_jobs
       set finished = null, priority = coalesce(?, priority),
-        queue = coalesce(?, queue), result = null, retried = datetime('now'),
+        queue = coalesce(?, queue), retried = datetime('now'),
         retries = retries + 1, started = null, state = 'inactive', worker = null,
         delayed = (datetime('now', ? || ' seconds'))
       where id = ? and retries = ? and state in ('failed', 'finished')},
@@ -210,7 +211,7 @@ sub _try {
   $tx->commit;
   
   my $info = $db->query(
-    'select id, args, retries, task from minion_jobs where id = ?', $job_id
+    'select id, args, attempts, retries, task from minion_jobs where id = ?', $job_id
   )->hash // return undef;
   $info->{args} = decode_json($info->{args});
   
@@ -306,6 +307,12 @@ These fields are currently available:
 
 Job arguments.
 
+=item attempts
+
+  attempts => 25
+
+Number of times performing this job will be attempted, defaults to C<1>.
+
 =item id
 
   id => '10023'
@@ -337,6 +344,12 @@ Enqueue a new job with C<inactive> state.
 These options are currently available:
 
 =over 2
+
+=item attempts
+
+  attempts => 25
+
+Number of times performing this job will be attempted, defaults to C<1>.
 
 =item delay
 
@@ -396,6 +409,12 @@ These fields are currently available:
   args => ['foo', 'bar']
 
 Job arguments.
+
+=item attempts
+
+  attempts => 25
+
+Number of times performing this job will be attempted, defaults to C<1>.
 
 =item created
 
@@ -670,3 +689,6 @@ create table if not exists minion_workers (
 -- 1 down
 drop table if exists minion_jobs;
 drop table if exists minion_workers;
+
+-- 2 up
+alter table minion_jobs add column attempts integer not null default 1;
