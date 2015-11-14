@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+0.003     2015-11-13 20:19:45 EST
   - Updated to support Minion 4.0
   - Allow retry methods to change options for already inactive jobs
 
