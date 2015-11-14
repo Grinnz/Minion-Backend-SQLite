@@ -272,15 +272,18 @@ ok !$job->remove, 'job has not been removed';
 ok $job->fail,  'job failed';
 ok $job->retry, 'job retried';
 is $job->info->{retries}, 2, 'job has been retried twice';
-ok !$job->info->{finished}, 'no finished timestamp';
-ok !$job->info->{started},  'no started timestamp';
-ok !$job->info->{worker},   'no worker';
 $job = $worker->dequeue(0);
 is $job->info->{state}, 'active', 'right state';
 ok $job->finish, 'job finished';
 ok $job->remove, 'job has been removed';
 is $job->info,   undef, 'no information';
 $id = $minion->enqueue(add => [6, 5]);
+$job = $minion->job($id);
+is $job->info->{state},   'inactive', 'right state';
+is $job->info->{retries}, 0,          'job has not been retried';
+ok $job->retry, 'job retried';
+is $job->info->{state},   'inactive', 'right state';
+is $job->info->{retries}, 1,          'job has been retried once';
 $job = $worker->dequeue(0);
 is $job->id, $id, 'right id';
 ok $job->fail,   'job failed';
@@ -457,7 +460,7 @@ is $job->info->{state}, 'failed', 'right state';
 is $job->info->{result}, 'Non-zero exit status (1)', 'right result';
 $worker->unregister;
 
-# Multiple attempts
+# Multiple attempts while processing
 is $minion->backoff->(0),  15,     'right result';
 is $minion->backoff->(1),  16,     'right result';
 is $minion->backoff->(2),  31,     'right result';
@@ -468,8 +471,7 @@ is $minion->backoff->(25), 390640, 'right result';
 $id = $minion->enqueue(exit => [] => {attempts => 2});
 $job = $worker->register->dequeue(0);
 is $job->id, $id, 'right id';
-is $job->retries,  0, 'job has not been retried';
-is $job->attempts, 2, 'job will be attempted twice';
+is $job->retries, 0, 'job has not been retried';
 $job->perform;
 is $job->info->{attempts}, 2,          'job will be attempted twice';
 is $job->info->{state},    'inactive', 'right state';
@@ -479,13 +481,34 @@ $minion->backend->sqlite->db->query(
   q{update minion_jobs set delayed = datetime('now') where id = ?}, $id);
 $job = $worker->register->dequeue(0);
 is $job->id, $id, 'right id';
-is $job->retries,  1, 'job has been retried once';
-is $job->attempts, 2, 'job will be attempted twice';
+is $job->retries, 1, 'job has been retried once';
 $job->perform;
 is $job->info->{attempts}, 2,        'job will be attempted twice';
 is $job->info->{state},    'failed', 'right state';
 is $job->info->{result}, 'Non-zero exit status (1)', 'right result';
 $worker->unregister;
+
+# Multiple attempts during maintenance
+$id = $minion->enqueue(exit => [] => {attempts => 2});
+$job = $worker->register->dequeue(0);
+is $job->id, $id, 'right id';
+is $job->retries, 0, 'job has not been retried';
+is $job->info->{attempts}, 2,        'job will be attempted twice';
+is $job->info->{state},    'active', 'right state';
+$worker->unregister;
+$minion->repair;
+is $job->info->{state},  'inactive',         'right state';
+is $job->info->{result}, 'Worker went away', 'right result';
+ok $job->info->{retried} < $job->info->{delayed}, 'delayed timestamp';
+$minion->backend->sqlite->db->query(
+  q{update minion_jobs set delayed = datetime('now') where id = ?}, $id);
+$job = $worker->register->dequeue(0);
+is $job->id, $id, 'right id';
+is $job->retries, 1, 'job has been retried once';
+$worker->unregister;
+$minion->repair;
+is $job->info->{state},  'failed',           'right state';
+is $job->info->{result}, 'Worker went away', 'right result';
 
 # A job needs to be dequeued again after a retry
 $minion->add_task(restart => sub { });

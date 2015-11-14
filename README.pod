@@ -81,12 +81,6 @@ These fields are currently available:
 
 Job arguments.
 
-=item attempts
-
-  attempts => 25
-
-Number of times performing this job will be attempted, defaults to C<1>.
-
 =item id
 
   id => '10023'
@@ -152,7 +146,9 @@ Queue to put job in, defaults to C<default>.
   my $bool = $backend->fail_job(
     $job_id, $retries, {msg => 'Something went wrong!'});
 
-Transition from C<active> to C<failed> state.
+Transition from C<active> to C<failed> state, and if there are attempts
+remaining, transition back to C<inactive> with an exponentially increasing
+delay based on L<Minion/"backoff">.
 
 =head2 finish_job
 
@@ -325,7 +321,8 @@ Reset job queue.
   my $bool = $backend->retry_job($job_id, $retries);
   my $bool = $backend->retry_job($job_id, $retries, {delay => 10});
 
-Transition from C<failed> or C<finished> state back to C<inactive>.
+Transition from C<failed> or C<finished> state back to C<inactive>, already
+C<inactive> jobs may also be retried to change options.
 
 These options are currently available:
 
@@ -356,6 +353,48 @@ Queue to put job in.
   my $stats = $backend->stats;
 
 Get statistics for jobs and workers.
+
+These fields are currently available:
+
+=over 2
+
+=item active_jobs
+
+  active_jobs => 100
+
+Number of jobs in C<active> state.
+
+=item active_workers
+
+  active_workers => 100
+
+Number of workers that are currently processing a job.
+
+=item failed_jobs
+
+  failed_jobs => 100
+
+Number of jobs in C<failed> state.
+
+=item finished_jobs
+
+  finished_jobs => 100
+
+Number of jobs in C<finished> state.
+
+=item inactive_jobs
+
+  inactive_jobs => 100
+
+Number of jobs in C<inactive> state.
+
+=item inactive_workers
+
+  inactive_workers => 100
+
+Number of workers that are currently not processing a job.
+
+=back
 
 =head2 unregister_worker
 

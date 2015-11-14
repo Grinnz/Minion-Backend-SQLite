@@ -106,15 +106,12 @@ sub repair {
   );
 
   # Abandoned jobs
-  my $result = encode_json('Worker went away');
-  $db->query(
-    q{update minion_jobs
-      set finished = datetime('now'), result = ?,
-        state = 'failed'
+  my $fail = $db->query(
+    q{select id, retries from minion_jobs as j
       where state = 'active'
-        and not exists(select 1 from minion_workers where id = minion_jobs.worker)},
-    {type => SQL_BLOB, value => $result}
-  );
+        and not exists(select 1 from minion_workers where id = j.worker)}
+  )->hashes;
+  $fail->each(sub { $self->fail_job(@$_{qw(id retries)}, 'Worker went away') });
 
   # Old jobs
   $db->query(
@@ -136,11 +133,10 @@ sub retry_job {
 
   return !!$self->sqlite->db->query(
     q{update minion_jobs
-      set finished = null, priority = coalesce(?, priority),
-        queue = coalesce(?, queue), retried = datetime('now'),
-        retries = retries + 1, started = null, state = 'inactive', worker = null,
+      set priority = coalesce(?, priority), queue = coalesce(?, queue),
+        retried = datetime('now'), retries = retries + 1, state = 'inactive',
         delayed = (datetime('now', ? || ' seconds'))
-      where id = ? and retries = ? and state in ('failed', 'finished')},
+      where id = ? and retries = ? and state in ('failed', 'finished', 'inactive')},
     @$options{qw(priority queue)}, $options->{delay} // 0, $id, $retries
   )->rows;
 }
@@ -159,12 +155,12 @@ sub stats {
     = $db->query($sql)->arrays->reduce(sub { $a->{$b->[0]} = $b->[1]; $a }, {});
 
   return {
-    active_workers   => $active,
-    inactive_workers => $all - $active,
     active_jobs      => $states->{active} || 0,
-    inactive_jobs    => $states->{inactive} || 0,
+    active_workers   => $active,
     failed_jobs      => $states->{failed} || 0,
     finished_jobs    => $states->{finished} || 0,
+    inactive_jobs    => $states->{inactive} || 0,
+    inactive_workers => $all - $active,
   };
 }
 
@@ -211,7 +207,7 @@ sub _try {
   $tx->commit;
   
   my $info = $db->query(
-    'select id, args, attempts, retries, task from minion_jobs where id = ?', $job_id
+    'select id, args, retries, task from minion_jobs where id = ?', $job_id
   )->hash // return undef;
   $info->{args} = decode_json($info->{args});
   
@@ -221,13 +217,20 @@ sub _try {
 sub _update {
   my ($self, $fail, $id, $retries, $result) = @_;
 
-  return !!$self->sqlite->db->query(
+  my $db = $self->sqlite->db;
+  return undef unless $db->query(
     q{update minion_jobs
       set finished = datetime('now'), result = ?, state = ?
       where id = ? and retries = ? and state = 'active'},
     {type => SQL_BLOB, value => encode_json($result)},
     $fail ? 'failed' : 'finished', $id, $retries
-  )->rows;
+  )->rows > 0;
+  
+  my $row = $db->query('select attempts from minion_jobs where id = ?', $id)->array;
+  return 1 if !$fail || (my $attempts = $row->[0]) == 1;
+  return 1 if $retries >= ($attempts - 1);
+  my $delay = $self->minion->backoff->($retries);
+  return $self->retry_job($id, $retries, {delay => $delay});
 }
 
 1;
@@ -313,12 +316,6 @@ These fields are currently available:
 
 Job arguments.
 
-=item attempts
-
-  attempts => 25
-
-Number of times performing this job will be attempted, defaults to C<1>.
-
 =item id
 
   id => '10023'
@@ -384,7 +381,9 @@ Queue to put job in, defaults to C<default>.
   my $bool = $backend->fail_job(
     $job_id, $retries, {msg => 'Something went wrong!'});
 
-Transition from C<active> to C<failed> state.
+Transition from C<active> to C<failed> state, and if there are attempts
+remaining, transition back to C<inactive> with an exponentially increasing
+delay based on L<Minion/"backoff">.
 
 =head2 finish_job
 
@@ -557,7 +556,8 @@ Reset job queue.
   my $bool = $backend->retry_job($job_id, $retries);
   my $bool = $backend->retry_job($job_id, $retries, {delay => 10});
 
-Transition from C<failed> or C<finished> state back to C<inactive>.
+Transition from C<failed> or C<finished> state back to C<inactive>, already
+C<inactive> jobs may also be retried to change options.
 
 These options are currently available:
 
@@ -588,6 +588,48 @@ Queue to put job in.
   my $stats = $backend->stats;
 
 Get statistics for jobs and workers.
+
+These fields are currently available:
+
+=over 2
+
+=item active_jobs
+
+  active_jobs => 100
+
+Number of jobs in C<active> state.
+
+=item active_workers
+
+  active_workers => 100
+
+Number of workers that are currently processing a job.
+
+=item failed_jobs
+
+  failed_jobs => 100
+
+Number of jobs in C<failed> state.
+
+=item finished_jobs
+
+  finished_jobs => 100
+
+Number of jobs in C<finished> state.
+
+=item inactive_jobs
+
+  inactive_jobs => 100
+
+Number of jobs in C<inactive> state.
+
+=item inactive_workers
+
+  inactive_workers => 100
+
+Number of workers that are currently not processing a job.
+
+=back
 
 =head2 unregister_worker
 
