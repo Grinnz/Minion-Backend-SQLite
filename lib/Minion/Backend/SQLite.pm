@@ -198,7 +198,7 @@ sub _try {
        order by priority desc, created
        limit 1}, @$queues, @$tasks
   );
-  my $job_id = ($res->array // [])->[0] // return undef;
+  my $job_id = ($res->arrays->first // [])->[0] // return undef;
   $db->query(
     q{update minion_jobs
       set started = datetime('now'), state = 'active', worker = ?
