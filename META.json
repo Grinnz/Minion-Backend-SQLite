@@ -50,6 +50,7 @@
       },
       "test" : {
          "requires" : {
+            "Mojolicious" : "6.0",
             "Test::More" : "0.88"
          }
       }
