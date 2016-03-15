@@ -1,7 +1,6 @@
 package Minion::Backend::SQLite;
 use Mojo::Base 'Minion::Backend';
 
-use DBI ':sql_types';
 use Mojo::SQLite;
 use Sys::Hostname 'hostname';
 use Time::HiRes 'usleep';
