@@ -2,7 +2,6 @@ package Minion::Backend::SQLite;
 use Mojo::Base 'Minion::Backend';
 
 use DBI ':sql_types';
-use Mojo::JSON qw(decode_json encode_json);
 use Mojo::SQLite;
 use Sys::Hostname 'hostname';
 use Time::HiRes 'usleep';
@@ -13,9 +12,8 @@ has 'sqlite';
 
 sub new {
   my $self = shift->SUPER::new(sqlite => Mojo::SQLite->new(@_));
-  my $sqlite = $self->sqlite->max_connections(1);
+  my $sqlite = $self->sqlite->auto_migrate(1)->max_connections(1);
   $sqlite->migrations->name('minion')->from_data;
-  $sqlite->once(connection => sub { shift->migrations->migrate });
   return $self;
 }
 
@@ -26,15 +24,13 @@ sub dequeue {
 }
 
 sub enqueue {
-  my ($self, $task) = (shift, shift);
-  my $args    = shift // [];
-  my $options = shift // {};
+  my ($self, $task, $args, $options) = (shift, shift, shift || [], shift || {});
 
   my $db = $self->sqlite->db;
   return $db->query(
     q{insert into minion_jobs (args, attempts, delayed, priority, queue, task)
       values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?)},
-    {type => SQL_BLOB, value => encode_json($args)}, $options->{attempts} // 1,
+    {json => $args}, $options->{attempts} // 1,
     $options->{delay} // 0, $options->{priority} // 0,
     $options->{queue} // 'default', $task
   )->last_insert_id;
@@ -51,8 +47,7 @@ sub job_info {
         strftime('%s',retried) as retried, retries,
         strftime('%s',started) as started, state, task, worker
       from minion_jobs where id = ?}, shift
-  )->hash // return undef;
-  $info->{$_} = decode_json $info->{$_} for grep { defined $info->{$_} } qw(args result);
+  )->expand(json => [qw(args result)])->hash // return undef;
   return $info;
 }
 
@@ -63,8 +58,7 @@ sub list_jobs {
     'select id from minion_jobs
      where (state = :1 or :1 is null) and (task = :2 or :2 is null)
      order by id desc
-     limit :3
-     offset :4', @$options{qw(state task)}, $limit, $offset
+     limit :3 offset :4', @$options{qw(state task)}, $limit, $offset
   )->arrays->map(sub { $self->job_info($_->[0]) })->to_array;
 }
 
@@ -128,15 +122,14 @@ sub reset {
 }
 
 sub retry_job {
-  my ($self, $id, $retries) = (shift, shift, shift);
-  my $options = shift // {};
+  my ($self, $id, $retries, $options) = (shift, shift, shift, shift || {});
 
   return !!$self->sqlite->db->query(
     q{update minion_jobs
       set priority = coalesce(?, priority), queue = coalesce(?, queue),
         retried = datetime('now'), retries = retries + 1, state = 'inactive',
         delayed = (datetime('now', ? || ' seconds'))
-      where id = ? and retries = ? and state in ('failed', 'finished', 'inactive')},
+      where id = ? and retries = ? and state in ('inactive', 'failed', 'finished')},
     @$options{qw(priority queue)}, $options->{delay} // 0, $id, $retries
   )->rows;
 }
@@ -144,24 +137,18 @@ sub retry_job {
 sub stats {
   my $self = shift;
 
-  my $db  = $self->sqlite->db;
-  my $all = $db->query('select count(*) from minion_workers')->array->[0];
-  my $sql
-    = q{select count(distinct worker) from minion_jobs where state = 'active'};
-  my $active = $db->query($sql)->array->[0];
+  my $stats = $self->sqlite->db->query(
+    q{select state || '_jobs', count(state) from minion_jobs group by state
+      union all
+      select 'inactive_workers', count(*) from minion_workers
+      union all
+      select 'active_workers', count(distinct worker) from minion_jobs
+      where state = 'active'}
+  )->arrays->reduce(sub { $a->{$b->[0]} = $b->[1]; $a }, {});
+  $stats->{inactive_workers} -= $stats->{active_workers};
+  $stats->{"${_}_jobs"} ||= 0 for qw(inactive active failed finished);
 
-  $sql = 'select state, count(state) from minion_jobs group by 1';
-  my $states
-    = $db->query($sql)->arrays->reduce(sub { $a->{$b->[0]} = $b->[1]; $a }, {});
-
-  return {
-    active_jobs      => $states->{active} || 0,
-    active_workers   => $active,
-    failed_jobs      => $states->{failed} || 0,
-    finished_jobs    => $states->{finished} || 0,
-    inactive_jobs    => $states->{inactive} || 0,
-    inactive_workers => $all - $active,
-  };
+  return $stats;
 }
 
 sub unregister_worker {
@@ -208,8 +195,7 @@ sub _try {
   
   my $info = $db->query(
     'select id, args, retries, task from minion_jobs where id = ?', $job_id
-  )->hash // return undef;
-  $info->{args} = decode_json($info->{args});
+  )->expand(json => 'args')->hash // return undef;
   
   return $info;
 }
@@ -222,8 +208,7 @@ sub _update {
     q{update minion_jobs
       set finished = datetime('now'), result = ?, state = ?
       where id = ? and retries = ? and state = 'active'},
-    {type => SQL_BLOB, value => encode_json($result)},
-    $fail ? 'failed' : 'finished', $id, $retries
+    {json => $result}, $fail ? 'failed' : 'finished', $id, $retries
   )->rows > 0;
   
   my $row = $db->query('select attempts from minion_jobs where id = ?', $id)->array;
@@ -291,8 +276,8 @@ Construct a new L<Minion::Backend::SQLite> object.
   my $job_info = $backend->dequeue($worker_id, 0.5);
   my $job_info = $backend->dequeue($worker_id, 0.5, {queues => ['important']});
 
-Wait for job, dequeue it and transition from C<inactive> to C<active> state or
-return C<undef> if queues were empty.
+Wait a given amount of time in seconds for a job, dequeue it and transition
+from C<inactive> to C<active> state, or return C<undef> if queues were empty.
 
 These options are currently available:
 
@@ -397,7 +382,7 @@ Transition from C<active> to C<finished> state.
 
   my $job_info = $backend->job_info($job_id);
 
-Get information about a job or return C<undef> if job does not exist.
+Get information about a job, or return C<undef> if job does not exist.
 
   # Check job state
   my $state = $backend->job_info($job_id)->{state};
@@ -641,7 +626,7 @@ Unregister worker.
 
   my $worker_info = $backend->worker_info($worker_id);
 
-Get information about a worker or return C<undef> if worker does not exist.
+Get information about a worker, or return C<undef> if worker does not exist.
 
   # Check worker host
   my $host = $backend->worker_info($worker_id)->{host};
@@ -740,3 +725,27 @@ drop table if exists minion_workers;
 
 -- 2 up
 alter table minion_jobs add column attempts integer not null default 1;
+
+-- 3 up
+create table minion_jobs_NEW (
+  id       integer not null primary key autoincrement,
+  args     text not null,
+  created  text not null default current_timestamp,
+  delayed  text not null,
+  finished text,
+  priority integer not null,
+  result   text,
+  retried  text,
+  retries  integer not null default 0,
+  started  text,
+  state    text not null default 'inactive',
+  task     text not null,
+  worker   integer,
+  queue    text not null default 'default',
+  attempts integer not null default 1
+);
+insert into minion_jobs_NEW select * from minion_jobs;
+drop table minion_jobs;
+alter table minion_jobs_NEW rename to minion_jobs;
+create index minion_jobs_priority_created on minion_jobs (priority desc, created);
+create index minion_jobs_state on minion_jobs (state, priority desc, created);

@@ -15,6 +15,13 @@ my $minion = Minion->new('SQLite');
 my $worker = $minion->repair->worker;
 isa_ok $worker->minion->app, 'Mojolicious', 'has default application';
 
+# Migrate up and down
+is $minion->backend->sqlite->migrations->active, 3, 'active version is 3';
+is $minion->backend->sqlite->migrations->migrate(0)->active, 0,
+  'active version is 0';
+is $minion->backend->sqlite->migrations->migrate->active, 3,
+  'active version is 3';
+
 # Register and unregister
 $worker->register;
 like $worker->info->{started}, qr/^[\d.]+$/, 'has timestamp';

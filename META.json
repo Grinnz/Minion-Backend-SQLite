@@ -4,7 +4,7 @@
       "Dan Book <dbook@cpan.org>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.041, CPAN::Meta::Converter version 2.150005",
+   "generated_by" : "Dist::Zilla version 5.043, CPAN::Meta::Converter version 2.150005",
    "license" : [
       "artistic_2"
    ],
@@ -40,7 +40,7 @@
          "requires" : {
             "DBI" : "0.88",
             "Minion" : "4.0",
-            "Mojo::SQLite" : "0.018",
+            "Mojo::SQLite" : "0.020",
             "Mojolicious" : "6.0",
             "Sys::Hostname" : "0",
             "Time::HiRes" : "0",
