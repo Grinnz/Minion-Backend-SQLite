@@ -1,7 +1,10 @@
 {{$NEXT}}
+
+0.004     2016-03-16 21:52:15 EDT
   - Bump Mojo::SQLite dependency to 0.020 for JSON1 support
-  - Use JSON1 fields for args and result, and Mojo::SQLite auto_migrate feature
-  - Various optimizations from Minion::Backend::Pg
+  - Use JSON1 fields for job args and result
+  - Use new Mojo::SQLite auto_migrate feature
+  - Various optimizations from Minion::Backend::Pg including much faster dequeue
 
 0.003     2015-11-13 20:19:45 EST
   - Updated to support Minion 4.0
