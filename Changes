@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Add support for queue option in list_jobs method.
 
 0.004     2016-03-16 21:52:15 EDT
   - Bump Mojo::SQLite dependency to 0.020 for JSON1 support
