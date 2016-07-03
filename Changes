@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+0.005     2016-07-02 20:46:32 EDT
   - Add support for EXPERIMENTAL delayed_jobs field in stats method.
   - Add queue option to list_jobs method.
   - Add support for job dependencies.
