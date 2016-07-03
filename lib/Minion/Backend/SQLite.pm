@@ -27,11 +27,12 @@ sub enqueue {
 
   my $db = $self->sqlite->db;
   return $db->query(
-    q{insert into minion_jobs (args, attempts, delayed, priority, queue, task)
-      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?)},
+    q{insert into minion_jobs
+       (args, attempts, delayed, parents, priority, queue, task)
+      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?, ?)},
     {json => $args}, $options->{attempts} // 1,
-    $options->{delay} // 0, $options->{priority} // 0,
-    $options->{queue} // 'default', $task
+    $options->{delay} // 0, {json => ($options->{parents} || [])},
+    $options->{priority} // 0, $options->{queue} // 'default', $task
   )->last_insert_id;
 }
 
@@ -40,13 +41,17 @@ sub finish_job { shift->_update(0, @_) }
 
 sub job_info {
   my $info = shift->sqlite->db->query(
-    q{select id, args, attempts, strftime('%s',created) as created,
+    q{select id, args, attempts,
+        (select json_group_array(distinct child.id)
+          from minion_jobs as child, json_each(child.parents) as parent_id
+          where j.id = parent_id.value) as children,
+        strftime('%s',created) as created,
         strftime('%s',delayed) as delayed,
-        strftime('%s',finished) as finished, priority, queue, result,
+        strftime('%s',finished) as finished, parents, priority, queue, result,
         strftime('%s',retried) as retried, retries,
         strftime('%s',started) as started, state, task, worker
-      from minion_jobs where id = ?}, shift
-  )->expand(json => [qw(args result)])->hash // return undef;
+      from minion_jobs as j where id = ?}, shift
+  )->expand(json => [qw(args children parents result)])->hash // return undef;
   return $info;
 }
 
@@ -91,7 +96,7 @@ sub remove_job {
 sub repair {
   my $self = shift;
 
-  # Check worker registry
+  # Workers without heartbeat
   my $db     = $self->sqlite->db;
   my $minion = $self->minion;
   $db->query(
@@ -99,19 +104,33 @@ sub repair {
       where notified < datetime('now', '-' || ? || ' seconds')}, $minion->missing_after
   );
 
-  # Abandoned jobs
+  # Jobs with missing worker (can be retried)
   my $fail = $db->query(
     q{select id, retries from minion_jobs as j
       where state = 'active'
-        and not exists(select 1 from minion_workers where id = j.worker)}
+        and not exists (select 1 from minion_workers where id = j.worker)}
   )->hashes;
   $fail->each(sub { $self->fail_job(@$_{qw(id retries)}, 'Worker went away') });
 
-  # Old jobs
+  # Jobs with missing parents (can't be retried)
+  $db->query(
+    q{update minion_jobs
+      set finished = datetime('now'), result = json('"Parent went away"'),
+        state = 'failed'
+      where json_array_length(parents) > 0 and json_array_length(parents) <> (
+        select count(distinct parent.id)
+        from minion_jobs as parent, json_each(minion_jobs.parents) as parent_id
+        where parent.id = parent_id.value
+      ) and state = 'inactive'}
+  );
+
+  # Old jobs with no unresolved dependencies
   $db->query(
     q{delete from minion_jobs
-      where state = 'finished' and finished < datetime('now', '-' || ? || ' seconds')},
-    $minion->remove_after
+      where finished <= datetime('now', '-' || ? || ' seconds') and not exists (
+        select 1 from minion_jobs as child, json_each(child.parents) as parent_id
+        where minion_jobs.id = parent_id.value and child.state <> 'finished'
+      ) and state = 'finished'}, $minion->remove_after
   );
 }
 
@@ -126,11 +145,12 @@ sub retry_job {
 
   return !!$self->sqlite->db->query(
     q{update minion_jobs
-      set priority = coalesce(?, priority), queue = coalesce(?, queue),
-        retried = datetime('now'), retries = retries + 1, state = 'inactive',
-        delayed = (datetime('now', ? || ' seconds'))
-      where id = ? and retries = ? and state in ('inactive', 'failed', 'finished')},
-    @$options{qw(priority queue)}, $options->{delay} // 0, $id, $retries
+      set delayed = (datetime('now', ? || ' seconds')),
+        priority = coalesce(?, priority), queue = coalesce(?, queue),
+        retried = datetime('now'), retries = retries + 1, state = 'inactive'
+      where id = ? and retries = ?
+      and state in ('inactive', 'failed', 'finished')},
+    $options->{delay} // 0, @$options{qw(priority queue)}, $id, $retries
   )->rows;
 }
 
@@ -141,7 +161,8 @@ sub stats {
     q{select state || '_jobs', count(state) from minion_jobs group by state
       union all
       select 'delayed_jobs', count(*) from minion_jobs
-      where delayed > datetime('now') and state = 'inactive'
+      where (delayed > datetime('now') or json_array_length(parents) > 0)
+        and state = 'inactive'
       union all
       select 'inactive_workers', count(*) from minion_workers
       union all
@@ -182,9 +203,14 @@ sub _try {
   
   my $tx = $db->begin;
   my $res = $db->query(
-    qq{select id from minion_jobs
-       where delayed <= datetime('now') and queue in ($queues_in)
-         and state = 'inactive' and task in ($tasks_in)
+    qq{select id from minion_jobs as j
+       where delayed <= datetime('now')
+       and (json_array_length(parents) = 0 or json_array_length(parents) = (
+         select count(distinct parent.id)
+         from minion_jobs as parent, json_each(j.parents) as parent_id
+         where parent.id = parent_id.value and parent.state = 'finished'
+       )) and queue in ($queues_in) and state = 'inactive'
+       and task in ($tasks_in)
        order by priority desc, created
        limit 1}, @$queues, @$tasks
   );
@@ -349,6 +375,13 @@ L<Minion/"backoff"> after the first attempt, defaults to C<1>.
 
 Delay job for this many seconds (from now).
 
+=item parents
+
+  parents => [$id1, $id2, $id3]
+
+One or more existing jobs this job depends on, and that need to have
+transitioned to the state C<finished> before it can be processed.
+
 =item priority
 
   priority => 5
@@ -410,6 +443,12 @@ Job arguments.
 
 Number of times performing this job will be attempted.
 
+=item children
+
+  children => ['10026', '10027', '10028']
+
+Jobs depending on this job.
+
 =item created
 
   created => 784111777
@@ -427,6 +466,12 @@ Epoch time job was delayed to.
   finished => 784111777
 
 Epoch time job was finished.
+
+=item parents
+
+  parents => ['10023', '10024', '10025']
+
+Jobs this job depends on.
 
 =item priority
 
@@ -605,8 +650,8 @@ Number of workers that are currently processing a job.
   delayed_jobs => 100
 
 Number of jobs in C<inactive> state that are scheduled to run at specific time
-in the future. Note that this field is EXPERIMENTAL and might change without
-warning!
+in the future or have unresolved dependencies. Note that this field is
+EXPERIMENTAL and might change without warning!
 
 =item failed_jobs
 
@@ -767,3 +812,6 @@ drop table minion_jobs;
 alter table minion_jobs_NEW rename to minion_jobs;
 create index minion_jobs_priority_created on minion_jobs (priority desc, created);
 create index minion_jobs_state on minion_jobs (state, priority desc, created);
+
+-- 4 up
+alter table minion_jobs add column parents text default '[]';

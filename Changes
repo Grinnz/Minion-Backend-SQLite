@@ -1,6 +1,9 @@
 {{$NEXT}}
   - Add support for EXPERIMENTAL delayed_jobs field in stats method.
-  - Add support for queue option in list_jobs method.
+  - Add queue option to list_jobs method.
+  - Add support for job dependencies.
+  - Add parents option to enqueue method.
+  - Add children and parents fields to job_info method.
 
 0.004     2016-03-16 21:52:15 EDT
   - Bump Mojo::SQLite dependency to 0.020 for JSON1 support
