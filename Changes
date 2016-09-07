@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Add support for EXPERIMENTAL enqueued_jobs field in stats method.
 
 0.005     2016-07-02 20:46:32 EDT
   - Add support for EXPERIMENTAL delayed_jobs field in stats method.

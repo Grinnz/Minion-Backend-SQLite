@@ -136,8 +136,12 @@ sub repair {
 
 sub reset {
   my $db = shift->sqlite->db;
+  my $tx = $db->begin;
   $db->query('delete from minion_jobs');
   $db->query('delete from minion_workers');
+  $db->query(q{delete from sqlite_sequence
+    where name in ('minion_jobs','minion_workers')});
+  $tx->commit;
 }
 
 sub retry_job {
@@ -158,7 +162,10 @@ sub stats {
   my $self = shift;
 
   my $stats = $self->sqlite->db->query(
-    q{select state || '_jobs', count(state) from minion_jobs group by state
+    q{select 'enqueued_jobs', seq from sqlite_sequence
+      where name = 'minion_jobs'
+      union all
+      select state || '_jobs', count(state) from minion_jobs group by state
       union all
       select 'delayed_jobs', count(*) from minion_jobs
       where (delayed > datetime('now') or json_array_length(parents) > 0)
@@ -170,7 +177,7 @@ sub stats {
       where state = 'active'}
   )->arrays->reduce(sub { $a->{$b->[0]} = $b->[1]; $a }, {});
   $stats->{inactive_workers} -= $stats->{active_workers};
-  $stats->{"${_}_jobs"} ||= 0 for qw(inactive active failed finished);
+  $stats->{"${_}_jobs"} ||= 0 for qw(inactive active failed finished enqueued);
 
   return $stats;
 }
@@ -651,6 +658,13 @@ Number of workers that are currently processing a job.
 
 Number of jobs in C<inactive> state that are scheduled to run at specific time
 in the future or have unresolved dependencies. Note that this field is
+EXPERIMENTAL and might change without warning!
+
+=item enqueued_jobs
+
+  enqueued_jobs => 100000
+
+Rough estimate of how many jobs have ever been enqueued. Note that this field is
 EXPERIMENTAL and might change without warning!
 
 =item failed_jobs
