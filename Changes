@@ -1,4 +1,6 @@
 {{$NEXT}}
+  - Add support for worker remote control commands with broadcast and receive
+    methods.
 
 0.006     2016-09-06 23:22:20 EDT
   - Add support for EXPERIMENTAL enqueued_jobs field in stats method.

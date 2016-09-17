@@ -16,6 +16,17 @@ sub new {
   return $self;
 }
 
+sub broadcast {
+  my ($self, $command, $args, $ids) = (shift, shift, shift || [], shift || []);
+  my $ids_in = join ',', ('?')x@$ids;
+  return !!$self->sqlite->db->query(
+    q{update minion_workers set inbox =
+      json_set(inbox, '$[' || json_array_length(inbox) || ']', json(?))} .
+      (@$ids ? " where id in ($ids_in)" : ''),
+      {json => [$command, @$args]}, @$ids
+  )->rows;
+}
+
 sub dequeue {
   my ($self, $id, $wait, $options) = @_;
   usleep($wait * 1000000) unless my $job = $self->_try($id, $options);
@@ -73,6 +84,18 @@ sub list_workers {
   my $sql = 'select id from minion_workers order by id desc limit ? offset ?';
   return $self->sqlite->db->query($sql, $limit, $offset)
     ->arrays->map(sub { $self->worker_info($_->[0]) })->to_array;
+}
+
+sub receive {
+  my ($self, $id) = @_;
+  my $db = $self->sqlite->db;
+  my $tx = $db->begin;
+  my $array = $db->query(q{select inbox from minion_workers where id = ?}, $id)
+    ->expand(json => 'inbox')->array;
+  $db->query(q{update minion_workers set inbox = '[]' where id = ?}, $id)
+    if $array;
+  $tx->commit;
+  return $array ? $array->[0] : [];
 }
 
 sub register_worker {
@@ -306,6 +329,14 @@ implements the following new ones.
   my $backend = Minion::Backend::SQLite->new->tap(sub { $_->sqlite->from_filename('C:\\foo\\bar.db') });
 
 Construct a new L<Minion::Backend::SQLite> object.
+
+=head2 broadcast
+
+  my $bool = $backend->broadcast('some_command');
+  my $bool = $backend->broadcast('some_command', [@args]);
+  my $bool = $backend->broadcast('some_command', [@args], [$id1, $id2, $id3]);
+
+Broadcast remote control command to one or more workers.
 
 =head2 dequeue
 
@@ -573,6 +604,12 @@ List only jobs for this task.
 
 Returns the same information as L</"worker_info"> but in batches.
 
+=head2 receive
+
+  my $commands = $backend->receive($worker_id);
+
+Receive remote control commands for worker.
+
 =head2 register_worker
 
   my $worker_id = $backend->register_worker;
@@ -829,3 +866,7 @@ create index minion_jobs_state on minion_jobs (state, priority desc, created);
 
 -- 4 up
 alter table minion_jobs add column parents text default '[]';
+
+-- 5 up
+alter table minion_workers add column inbox text
+  check(json_valid(inbox) and json_type(inbox) = 'array') default '[]';
