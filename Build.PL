@@ -91,6 +91,7 @@ EOW
       "requires" => {
         "Minion" => "4.0",
         "Mojo::SQLite" => "0.020",
+        "Mojolicious" => "6.0",
         "Sys::Hostname" => 0,
         "Time::HiRes" => 0,
         "perl" => "5.010001"
@@ -98,7 +99,6 @@ EOW
       "test_requires" => {
         "File::Spec" => 0,
         "Module::Metadata" => 0,
-        "Mojolicious" => "6.0",
         "Test::More" => "0.88"
       }
     );
@@ -107,7 +107,6 @@ EOW
     my %fallback_build_requires = (
       "File::Spec" => 0,
       "Module::Metadata" => 0,
-      "Mojolicious" => "6.0",
       "Test::More" => "0.88"
     );
 
