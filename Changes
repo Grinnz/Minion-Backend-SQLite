@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Correct ordering of dequeued jobs that are created in the same second.
 
 0.007     2016-09-19 20:30:32 EDT
   - Add support for worker remote control commands with broadcast and receive

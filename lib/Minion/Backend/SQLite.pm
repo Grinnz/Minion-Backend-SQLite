@@ -241,7 +241,7 @@ sub _try {
          where parent.id = parent_id.value and parent.state = 'finished'
        )) and queue in ($queues_in) and state = 'inactive'
        and task in ($tasks_in)
-       order by priority desc, created
+       order by priority desc, id
        limit 1}, @$queues, @$tasks
   );
   my $job_id = ($res->arrays->first // [])->[0] // return undef;
@@ -861,8 +861,6 @@ create table minion_jobs_NEW (
 insert into minion_jobs_NEW select * from minion_jobs;
 drop table minion_jobs;
 alter table minion_jobs_NEW rename to minion_jobs;
-create index minion_jobs_priority_created on minion_jobs (priority desc, created);
-create index minion_jobs_state on minion_jobs (state, priority desc, created);
 
 -- 4 up
 alter table minion_jobs add column parents text default '[]';
@@ -870,3 +868,8 @@ alter table minion_jobs add column parents text default '[]';
 -- 5 up
 alter table minion_workers add column inbox text
   check(json_valid(inbox) and json_type(inbox) = 'array') default '[]';
+
+-- 6 up
+drop index if exists minion_jobs_priority_created;
+drop index if exists minion_jobs_state;
+create index if not exists minion_jobs_state_priority_id on minion_jobs (state, priority desc, id);
