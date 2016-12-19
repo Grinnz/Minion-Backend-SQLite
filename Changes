@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Increase dependency on Mojo::SQLite for memory leak fix
 
 0.008     2016-12-16 22:36:53 EST
   - Correct ordering of dequeued jobs that are created in the same second.

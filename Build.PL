@@ -84,13 +84,13 @@ EOW
         "Dan Book <dbook\@cpan.org>"
       ],
       "dist_name" => "Minion-Backend-SQLite",
-      "dist_version" => "0.008",
+      "dist_version" => "0.009",
       "license" => "artistic_2",
       "module_name" => "Minion::Backend::SQLite",
       "recursive_test_files" => 1,
       "requires" => {
         "Minion" => "4.0",
-        "Mojo::SQLite" => "0.020",
+        "Mojo::SQLite" => "1.002",
         "Mojolicious" => "6.0",
         "Sys::Hostname" => 0,
         "Time::HiRes" => 0,

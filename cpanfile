@@ -1,7 +1,7 @@
 requires 'perl' => '5.010001';
 requires 'Minion' => '4.0';
 requires 'Mojolicious' => '6.0';
-requires 'Mojo::SQLite' => '0.020';
+requires 'Mojo::SQLite' => '1.002';
 requires 'Sys::Hostname';
 requires 'Time::HiRes';
 suggests 'Mojo::JSON::MaybeXS';
