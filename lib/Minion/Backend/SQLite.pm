@@ -99,14 +99,15 @@ sub receive {
 }
 
 sub register_worker {
-  my ($self, $id) = @_;
+  my ($self, $id, $options) = (shift, shift, shift || {});
 
-  my $sql
-    = q{update minion_workers set notified = datetime('now') where id = ?};
-  return $id if $id && $self->sqlite->db->query($sql, $id)->rows;
+  return $id if $id && $self->sqlite->db->query(
+    q{update minion_workers set notified = datetime('now'), status = ?
+      where id = ?}, {json => $options->{status} // {}}, $id)->rows;
 
-  $sql = 'insert into minion_workers (host, pid) values (?, ?)';
-  return $self->sqlite->db->query($sql, hostname, $$)->last_insert_id;
+  return $self->sqlite->db->query(
+    q{insert into minion_workers (host, pid, status) values (?, ?, ?)},
+    hostname, $$, {json => $options->{status} // {}})->last_insert_id;
 }
 
 sub remove_job {
@@ -211,11 +212,11 @@ sub unregister_worker {
 sub worker_info {
   my $info = shift->sqlite->db->query(
     q{select w.id, strftime('%s',w.notified) as notified, group_concat(j.id) as jobs,
-      w.host, w.pid, strftime('%s',w.started) as started
+      w.host, w.pid, status, strftime('%s',w.started) as started
       from minion_workers as w
       left join minion_jobs as j on j.worker = w.id and j.state = 'active'
       where w.id = ? group by w.id}, shift
-  )->hash // return undef;
+  )->expand(json => 'status')->hash // return undef;
   $info->{jobs} = [split /,/, ($info->{jobs} // '')];
   return $info;
 }
@@ -613,8 +614,22 @@ Receive remote control commands for worker.
 
   my $worker_id = $backend->register_worker;
   my $worker_id = $backend->register_worker($worker_id);
+  my $worker_id = $backend->register_worker(
+    $worker_id, {status => {queues => ['default', 'important']}});
 
 Register worker or send heartbeat to show that this worker is still alive.
+
+These options are currently available:
+
+=over 2
+
+=item status
+
+  status => {queues => ['default', 'important']}
+
+Hash reference with whatever status information the worker would like to share.
+
+=back
 
 =head2 remove_job
 
@@ -778,6 +793,12 @@ Process id of worker.
 
 Epoch time worker was started.
 
+=item status
+
+  status => {queues => ['default', 'important']}
+
+Hash reference with whatever status information the worker would like to share.
+
 =back
 
 =head1 BUGS
@@ -872,3 +893,7 @@ alter table minion_workers add column inbox text
 drop index if exists minion_jobs_priority_created;
 drop index if exists minion_jobs_state;
 create index if not exists minion_jobs_state_priority_id on minion_jobs (state, priority desc, id);
+
+-- 7 up
+alter table minion_workers add column status text
+  check(json_valid(status) and json_type(status) = 'object') default '{}';

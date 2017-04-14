@@ -1,5 +1,7 @@
 {{$NEXT}}
   - Support retrying active jobs in retry_job.
+  - Support sharing worker status information in register_worker and
+    worker_info.
 
 0.009     2016-12-19 20:34:58 EST
   - Increase dependency on Mojo::SQLite for memory leak fix
