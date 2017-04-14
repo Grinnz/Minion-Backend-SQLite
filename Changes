@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Support retrying active jobs in retry_job.
 
 0.009     2016-12-19 20:34:58 EST
   - Increase dependency on Mojo::SQLite for memory leak fix
