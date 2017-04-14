@@ -89,7 +89,7 @@ EOW
       "module_name" => "Minion::Backend::SQLite",
       "recursive_test_files" => 1,
       "requires" => {
-        "Minion" => "4.0",
+        "Minion" => "6.05",
         "Mojo::SQLite" => "1.002",
         "Mojolicious" => "6.0",
         "Sys::Hostname" => 0,
