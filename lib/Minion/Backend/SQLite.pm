@@ -5,7 +5,7 @@ use Mojo::SQLite;
 use Sys::Hostname 'hostname';
 use Time::HiRes 'usleep';
 
-our $VERSION = '0.010';
+our $VERSION = '1.000';
 
 has 'sqlite';
 
