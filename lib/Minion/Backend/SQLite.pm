@@ -39,11 +39,12 @@ sub enqueue {
   my $db = $self->sqlite->db;
   return $db->query(
     q{insert into minion_jobs
-       (args, attempts, delayed, parents, priority, queue, task)
-      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?, ?)},
+       (args, attempts, delayed, notes, parents, priority, queue, task)
+      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?, ?, ?)},
     {json => $args}, $options->{attempts} // 1,
-    $options->{delay} // 0, {json => ($options->{parents} || [])},
-    $options->{priority} // 0, $options->{queue} // 'default', $task
+    $options->{delay} // 0, {json => $options->{notes} || {}},
+    {json => ($options->{parents} || [])}, $options->{priority} // 0,
+    $options->{queue} // 'default', $task
   )->last_insert_id;
 }
 
@@ -51,19 +52,18 @@ sub fail_job   { shift->_update(1, @_) }
 sub finish_job { shift->_update(0, @_) }
 
 sub job_info {
-  my $info = shift->sqlite->db->query(
+  shift->sqlite->db->query(
     q{select id, args, attempts,
         (select json_group_array(distinct child.id)
           from minion_jobs as child, json_each(child.parents) as parent_id
           where j.id = parent_id.value) as children,
         strftime('%s',created) as created,
         strftime('%s',delayed) as delayed,
-        strftime('%s',finished) as finished, parents, priority, queue, result,
-        strftime('%s',retried) as retried, retries,
+        strftime('%s',finished) as finished, notes, parents, priority, queue,
+        result, strftime('%s',retried) as retried, retries,
         strftime('%s',started) as started, state, task, worker
       from minion_jobs as j where id = ?}, shift
-  )->expand(json => [qw(args children parents result)])->hash // return undef;
-  return $info;
+  )->expand(json => [qw(args children notes parents result)])->hash;
 }
 
 sub list_jobs {
@@ -100,6 +100,14 @@ sub lock {
     $tx->commit;
   }
   return !!1;
+}
+
+sub note {
+  my ($self, $id, $key, $value) = @_;
+  return !!$self->sqlite->db->query(
+    q{update minion_jobs set notes = json_set(notes, '$.' || ?, json(?))
+      where id = ?}, $key, {json => $value}, $id
+  )->rows;
 }
 
 sub receive {
@@ -424,6 +432,12 @@ L<Minion/"backoff"> after the first attempt, defaults to C<1>.
 
 Delay job for this many seconds (from now).
 
+=item notes
+
+  notes => {foo => 'bar', baz => [1, 2, 3]}
+
+Hash reference with arbitrary metadata for this job.
+
 =item parents
 
   parents => [$id1, $id2, $id3]
@@ -515,6 +529,12 @@ Epoch time job was delayed to.
   finished => 784111777
 
 Epoch time job was finished.
+
+=item notes
+
+  notes => {foo => 'bar', baz => [1, 2, 3]}
+
+Hash reference with arbitrary metadata for this job.
 
 =item parents
 
@@ -635,6 +655,12 @@ Number of shared locks with the same name that can be active at the same time,
 defaults to C<1>.
 
 =back
+
+=head2 note
+
+  my $bool = $backend->note($job_id, foo => 'bar');
+
+Change a metadata field for a job.
 
 =head2 receive
 
@@ -943,6 +969,8 @@ create table if not exists minion_locks (
   expires text not null
 );
 create index if not exists minion_locks_name_expires on minion_locks (name, expires);
+alter table minion_jobs add column notes text not null
+  check(json_valid(notes) and json_type(notes) = 'object') default '{}';
 
 -- 8 down
 drop table if exists minion_locks;

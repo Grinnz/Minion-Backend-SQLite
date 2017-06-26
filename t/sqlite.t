@@ -230,6 +230,7 @@ is $batch->[0]{retries},   0, 'job has not been retried';
 like $batch->[0]{created}, qr/^[\d.]+$/, 'has created timestamp';
 is $batch->[1]{task},      'fail', 'right task';
 is_deeply $batch->[1]{args}, [], 'right arguments';
+is_deeply $batch->[1]{notes}, {}, 'right metadata';
 is_deeply $batch->[1]{result}, ['works'], 'right result';
 is $batch->[1]{state},    'finished', 'right state';
 is $batch->[1]{priority}, 0,          'right priority';
@@ -491,13 +492,28 @@ $worker->unregister;
 $minion->add_task(
   nested => sub {
     my ($job, $hash, $array) = @_;
+    $job->note(bar => {baz => [1, 2, 3]});
+    $job->note(baz => 'yada');
     $job->finish([{23 => $hash->{first}[0]{second} x $array->[0][0]}]);
   }
 );
-$minion->enqueue(nested => [{first => [{second => 'test'}]}, [[3]]]);
+$minion->enqueue(
+  'nested',
+  [{first => [{second => 'test'}]}, [[3]]],
+  {notes => {foo => [4, 5, 6]}}
+);
 $job = $worker->register->dequeue(0);
 $job->perform;
 is $job->info->{state}, 'finished', 'right state';
+ok $job->note(yada => ['works']), 'added metadata';
+ok !$minion->backend->note(-1, yada => ['failed']), 'not added metadata';
+my $notes = {
+  foo => [4, 5, 6],
+  bar  => {baz => [1, 2, 3]},
+  baz  => 'yada',
+  yada => ['works']
+};
+is_deeply $job->info->{notes}, $notes, 'right metadata';
 is_deeply $job->info->{result}, [{23 => 'testtesttest'}], 'right structure';
 $worker->unregister;
 
