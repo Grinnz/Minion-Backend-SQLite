@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.000     2017-06-26 00:42:49 EDT
   - Add support for rate limiting and unique jobs with lock and unlock methods.
   - Add support for job metadata with note method, notes option for enqueue
     method, and notes field in job_info method.
