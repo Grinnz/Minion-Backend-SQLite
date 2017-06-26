@@ -86,6 +86,22 @@ sub list_workers {
     ->arrays->map(sub { $self->worker_info($_->[0]) })->to_array;
 }
 
+sub lock {
+  my ($self, $name, $duration, $options) = (shift, shift, shift, shift // {});
+  my $db = $self->sqlite->db;
+  $db->query(q{delete from minion_locks where expires < datetime('now')});
+  my $tx = $db->begin('exclusive');
+  my $locks = $db->query(q{select count(*) from minion_locks where name = ?},
+    $name)->arrays->first->[0];
+  return !!0 if defined $locks and $locks >= ($options->{limit} || 1);
+  if (defined $duration and $duration > 0) {
+    $db->query(q{insert into minion_locks (name, expires)
+      values (?, datetime('now', ? || ' seconds'))}, $name, $duration);
+    $tx->commit;
+  }
+  return !!1;
+}
+
 sub receive {
   my ($self, $id) = @_;
   my $db = $self->sqlite->db;
@@ -150,9 +166,10 @@ sub reset {
   my $db = shift->sqlite->db;
   my $tx = $db->begin;
   $db->query('delete from minion_jobs');
+  $db->query('delete from minion_locks');
   $db->query('delete from minion_workers');
   $db->query(q{delete from sqlite_sequence
-    where name in ('minion_jobs','minion_workers')});
+    where name in ('minion_jobs','minion_locks','minion_workers')});
   $tx->commit;
 }
 
@@ -188,6 +205,15 @@ sub stats {
   $stats->{inactive_workers} -= $stats->{active_workers};
 
   return $stats;
+}
+
+sub unlock {
+  !!shift->sqlite->db->query(
+    q{delete from minion_locks where id = (
+      select id from minion_locks
+      where expires > datetime('now') and name = ?
+      order by expires limit 1)}, shift
+  )->rows;
 }
 
 sub unregister_worker {
@@ -589,6 +615,27 @@ List only jobs for this task.
 
 Returns the same information as L</"worker_info"> but in batches.
 
+=head2 lock
+
+  my $bool = $backend->lock('foo', 3600);
+  my $bool = $backend->lock('foo', 3600, {limit => 20});
+
+Try to acquire a named lock that will expire automatically after the given
+amount of time in seconds.
+
+These options are currently available:
+
+=over 2
+
+=item limit
+
+  limit => 20
+
+Number of shared locks with the same name that can be active at the same time,
+defaults to C<1>.
+
+=back
+
 =head2 receive
 
   my $commands = $backend->receive($worker_id);
@@ -728,6 +775,12 @@ Number of jobs in C<inactive> state.
 Number of workers that are currently not processing a job.
 
 =back
+
+=head2 unlock
+
+  my $bool = $backend->unlock('foo');
+
+Release a named lock.
 
 =head2 unregister_worker
 
@@ -882,3 +935,14 @@ create index if not exists minion_jobs_state_priority_id on minion_jobs (state, 
 -- 7 up
 alter table minion_workers add column status text not null
   check(json_valid(status) and json_type(status) = 'object') default '{}';
+
+-- 8 up
+create table if not exists minion_locks (
+  id integer not null primary key autoincrement,
+  name text not null,
+  expires text not null
+);
+create index if not exists minion_locks_name_expires on minion_locks (name, expires);
+
+-- 8 down
+drop table if exists minion_locks;

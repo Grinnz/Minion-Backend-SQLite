@@ -16,11 +16,11 @@ my $worker = $minion->repair->worker;
 isa_ok $worker->minion->app, 'Mojolicious', 'has default application';
 
 # Migrate up and down
-is $minion->backend->sqlite->migrations->active, 7, 'active version is 7';
+is $minion->backend->sqlite->migrations->active, 8, 'active version is 8';
 is $minion->backend->sqlite->migrations->migrate(0)->active, 0,
   'active version is 0';
-is $minion->backend->sqlite->migrations->migrate->active, 7,
-  'active version is 7';
+is $minion->backend->sqlite->migrations->migrate->active, 8,
+  'active version is 8';
 
 # Register and unregister
 $worker->register;
@@ -120,10 +120,42 @@ ok !$batch->[1], 'no more results';
 $worker->unregister;
 $worker2->unregister;
 
+# Exclusive lock
+ok $minion->lock('foo', 3600), 'locked';
+ok !$minion->lock('foo', 3600), 'not locked again';
+ok $minion->unlock('foo'), 'unlocked';
+ok !$minion->unlock('foo'), 'not unlocked again';
+ok $minion->lock('foo', -3600), 'locked';
+ok $minion->lock('foo', 3600),  'locked again';
+ok !$minion->lock('foo', -3600), 'not locked again';
+ok !$minion->lock('foo', 3600),  'not locked again';
+ok $minion->unlock('foo'), 'unlocked';
+ok !$minion->unlock('foo'), 'not unlocked again';
+ok $minion->lock('yada', 3600, {limit => 1}), 'locked';
+ok !$minion->lock('yada', 3600, {limit => 1}), 'not locked again';
+
+# Shared lock
+ok $minion->lock('bar', 3600,  {limit => 3}), 'locked';
+ok $minion->lock('bar', 3600,  {limit => 3}), 'locked again';
+ok $minion->lock('bar', -3600, {limit => 3}), 'locked again';
+ok $minion->lock('bar', 3600,  {limit => 3}), 'locked again';
+ok !$minion->lock('bar', 3600, {limit => 2}), 'not locked again';
+ok $minion->lock('baz', 3600, {limit => 3}), 'locked';
+ok $minion->unlock('bar'), 'unlocked';
+ok $minion->lock('bar', 3600, {limit => 3}), 'locked again';
+ok $minion->unlock('bar'), 'unlocked again';
+ok $minion->unlock('bar'), 'unlocked again';
+ok $minion->unlock('bar'), 'unlocked again';
+ok !$minion->unlock('bar'), 'not unlocked again';
+ok $minion->unlock('baz'), 'unlocked';
+ok !$minion->unlock('baz'), 'not unlocked again';
+
 # Reset
 $minion->reset->repair;
 ok !$minion->backend->sqlite->db->query(
   'select count(id) as count from minion_jobs')->hash->{count}, 'no jobs';
+ok !$minion->backend->sqlite->db->query(
+  'select count(id) as count from minion_locks')->hash->{count}, 'no locks';
 ok !$minion->backend->sqlite->db->query(
   'select count(id) as count from minion_workers')->hash->{count}, 'no workers';
 
