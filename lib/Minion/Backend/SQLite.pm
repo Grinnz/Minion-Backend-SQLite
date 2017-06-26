@@ -136,18 +136,6 @@ sub repair {
   )->hashes;
   $fail->each(sub { $self->fail_job(@$_{qw(id retries)}, 'Worker went away') });
 
-  # Jobs with missing parents (can't be retried)
-  $db->query(
-    q{update minion_jobs
-      set finished = datetime('now'), result = json('"Parent went away"'),
-        state = 'failed'
-      where json_array_length(parents) > 0 and json_array_length(parents) <> (
-        select count(distinct parent.id)
-        from minion_jobs as parent, json_each(minion_jobs.parents) as parent_id
-        where parent.id = parent_id.value
-      ) and state = 'inactive'}
-  );
-
   # Old jobs with no unresolved dependencies
   $db->query(
     q{delete from minion_jobs
@@ -232,10 +220,10 @@ sub _try {
   my $res = $db->query(
     qq{select id from minion_jobs as j
        where delayed <= datetime('now')
-       and (json_array_length(parents) = 0 or json_array_length(parents) = (
-         select count(distinct parent.id)
-         from minion_jobs as parent, json_each(j.parents) as parent_id
-         where parent.id = parent_id.value and parent.state = 'finished'
+       and (json_array_length(parents) = 0 or not exists (
+         select 1 from minion_jobs as parent, json_each(j.parents) as parent_id
+         where parent.id = parent_id.value
+         and parent.state in ('inactive', 'active', 'failed')
        )) and queue in ($queues_in) and state = 'inactive'
        and task in ($tasks_in)
        order by priority desc, id
