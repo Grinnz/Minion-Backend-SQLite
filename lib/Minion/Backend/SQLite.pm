@@ -1,6 +1,7 @@
 package Minion::Backend::SQLite;
 use Mojo::Base 'Minion::Backend';
 
+use Carp 'croak';
 use Mojo::SQLite;
 use Sys::Hostname 'hostname';
 use Time::HiRes 'usleep';
@@ -104,6 +105,8 @@ sub lock {
 
 sub note {
   my ($self, $id, $key, $value) = @_;
+  croak "Invalid note key '$key'; must not contain the characters '.', '[', or ']'"
+    if $key =~ m/[\[\].]/;
   return !!$self->sqlite->db->query(
     q{update minion_jobs set notes = json_set(notes, '$.' || ?, json(?))
       where id = ?}, $key, {json => $value}, $id
