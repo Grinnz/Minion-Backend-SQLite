@@ -880,10 +880,10 @@ drop table minion_jobs;
 alter table minion_jobs_NEW rename to minion_jobs;
 
 -- 4 up
-alter table minion_jobs add column parents text default '[]';
+alter table minion_jobs add column parents text not null default '[]';
 
 -- 5 up
-alter table minion_workers add column inbox text
+alter table minion_workers add column inbox text not null
   check(json_valid(inbox) and json_type(inbox) = 'array') default '[]';
 
 -- 6 up
@@ -892,5 +892,5 @@ drop index if exists minion_jobs_state;
 create index if not exists minion_jobs_state_priority_id on minion_jobs (state, priority desc, id);
 
 -- 7 up
-alter table minion_workers add column status text
+alter table minion_workers add column status text not null
   check(json_valid(status) and json_type(status) = 'object') default '{}';
