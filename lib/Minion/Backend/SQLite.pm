@@ -185,22 +185,19 @@ sub stats {
   my $self = shift;
 
   my $stats = $self->sqlite->db->query(
-    q{select 'enqueued_jobs', seq from sqlite_sequence
-      where name = 'minion_jobs'
-      union all
-      select state || '_jobs', count(state) from minion_jobs group by state
-      union all
-      select 'delayed_jobs', count(*) from minion_jobs
-      where (delayed > datetime('now') or json_array_length(parents) > 0)
-        and state = 'inactive'
-      union all
-      select 'inactive_workers', count(*) from minion_workers
-      union all
-      select 'active_workers', count(distinct worker) from minion_jobs
-      where state = 'active'}
-  )->arrays->reduce(sub { $a->{$b->[0]} = $b->[1]; $a }, {});
+    q{select count(case state when 'inactive' then 1 end) as inactive_jobs,
+      count(case state when 'active' then 1 end) as active_jobs,
+      count(case state when 'failed' then 1 end) as failed_jobs,
+      count(case state when 'finished' then 1 end) as finished_jobs,
+      count(case when state = 'inactive' and (delayed > datetime('now')
+        or json_array_length(parents) > 0) then 1 end) as delayed_jobs,
+      count(distinct case when state = 'active' then worker end) as active_workers,
+      ifnull((select seq from sqlite_sequence where name = 'minion_jobs'), 0)
+        as enqueued_jobs,
+      (select count(*) from minion_workers) as inactive_workers
+      from minion_jobs}
+  )->hash;
   $stats->{inactive_workers} -= $stats->{active_workers};
-  $stats->{"${_}_jobs"} ||= 0 for qw(inactive active failed finished enqueued);
 
   return $stats;
 }
