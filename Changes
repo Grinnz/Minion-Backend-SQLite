@@ -1,5 +1,4 @@
 {{$NEXT}}
-  - Optimizations based on Minion::Backend::Pg 7.01.
   - Add support for rate limiting and unique jobs with lock and unlock methods.
   - Add support for job metadata with note method, notes option for enqueue
     method, and notes field in job_info method.
