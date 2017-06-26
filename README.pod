@@ -134,6 +134,12 @@ L<Minion/"backoff"> after the first attempt, defaults to C<1>.
 
 Delay job for this many seconds (from now).
 
+=item notes
+
+  notes => {foo => 'bar', baz => [1, 2, 3]}
+
+Hash reference with arbitrary metadata for this job.
+
 =item parents
 
   parents => [$id1, $id2, $id3]
@@ -225,6 +231,12 @@ Epoch time job was delayed to.
   finished => 784111777
 
 Epoch time job was finished.
+
+=item notes
+
+  notes => {foo => 'bar', baz => [1, 2, 3]}
+
+Hash reference with arbitrary metadata for this job.
 
 =item parents
 
@@ -324,6 +336,34 @@ List only jobs for this task.
   my $batch = $backend->list_workers($offset, $limit);
 
 Returns the same information as L</"worker_info"> but in batches.
+
+=head2 lock
+
+  my $bool = $backend->lock('foo', 3600);
+  my $bool = $backend->lock('foo', 3600, {limit => 20});
+
+Try to acquire a named lock that will expire automatically after the given
+amount of time in seconds.
+
+These options are currently available:
+
+=over 2
+
+=item limit
+
+  limit => 20
+
+Number of shared locks with the same name that can be active at the same time,
+defaults to C<1>.
+
+=back
+
+=head2 note
+
+  my $bool = $backend->note($job_id, foo => 'bar');
+
+Change a metadata field for a job. It is currently an error to attempt to set a
+metadata field with a name containing the characters C<.>, C<[>, or C<]>.
 
 =head2 receive
 
@@ -464,6 +504,12 @@ Number of jobs in C<inactive> state.
 Number of workers that are currently not processing a job.
 
 =back
+
+=head2 unlock
+
+  my $bool = $backend->unlock('foo');
+
+Release a named lock.
 
 =head2 unregister_worker
 

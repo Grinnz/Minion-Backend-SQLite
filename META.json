@@ -38,7 +38,7 @@
       },
       "runtime" : {
          "requires" : {
-            "Minion" : "6.05",
+            "Minion" : "7.01",
             "Mojo::SQLite" : "1.002",
             "Mojolicious" : "6.0",
             "Sys::Hostname" : "0",
@@ -63,7 +63,7 @@
    "provides" : {
       "Minion::Backend::SQLite" : {
          "file" : "lib/Minion/Backend/SQLite.pm",
-         "version" : "1.001"
+         "version" : "2.000"
       }
    },
    "release_status" : "stable",
@@ -79,7 +79,7 @@
       },
       "x_IRC" : "irc://irc.perl.org/#mojo"
    },
-   "version" : "1.001",
+   "version" : "2.000",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.026000"
@@ -273,7 +273,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v1.001",
+                  "tag" : "v2.000",
                   "tag_format" : "v%v",
                   "tag_message" : "v%v"
                },

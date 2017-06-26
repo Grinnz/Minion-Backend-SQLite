@@ -105,7 +105,7 @@ sub lock {
 
 sub note {
   my ($self, $id, $key, $value) = @_;
-  croak "Invalid note key '$key'; must not contain the characters '.', '[', or ']'"
+  croak qq{Invalid note key '$key'; must not contain '.', '[', or ']'}
     if $key =~ m/[\[\].]/;
   return !!$self->sqlite->db->query(
     q{update minion_jobs set notes = json_set(notes, '$.' || ?, json(?))
@@ -663,7 +663,8 @@ defaults to C<1>.
 
   my $bool = $backend->note($job_id, foo => 'bar');
 
-Change a metadata field for a job.
+Change a metadata field for a job. It is currently an error to attempt to set a
+metadata field with a name containing the characters C<.>, C<[>, or C<]>.
 
 =head2 receive
 
