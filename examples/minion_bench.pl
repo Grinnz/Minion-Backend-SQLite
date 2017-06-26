@@ -13,6 +13,8 @@ my $WORKERS     = 4;
 my $INFO        = 100;
 my $STATS       = 100;
 my $REPAIR      = 100;
+my $LOCK        = 1000;
+my $UNLOCK      = 1000;
 
 my $tempdir = File::Temp->newdir;
 my $url = Mojo::URL->new->scheme('sqlite')->path(catfile $tempdir, 'temp.db');
@@ -95,5 +97,22 @@ $minion->repair for 1 .. $REPAIR;
 $elapsed = time - $before;
 $avg = sprintf '%.3f', $REPAIR / $elapsed;
 say "Repaired $REPAIR times in $elapsed seconds ($avg/s)";
+
+# Lock
+say "Acquiring locks $LOCK times";
+$before = time;
+$minion->lock($_ % 2 ? 'foo' : 'bar', 3600, {limit => int($LOCK / 2)})
+  for 1 .. $LOCK;
+$elapsed = time - $before;
+$avg = sprintf '%.3f', $LOCK / $elapsed;
+say "Acquired locks $LOCK times in $elapsed seconds ($avg/s)";
+
+# Unlock
+say "Releasing locks $UNLOCK times";
+$before = time;
+$minion->unlock($_ % 2 ? 'foo' : 'bar') for 1 .. $UNLOCK;
+$elapsed = time - $before;
+$avg = sprintf '%.3f', $UNLOCK / $elapsed;
+say "Releasing locks $UNLOCK times in $elapsed seconds ($avg/s)";
 
 }
