@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Optimizations based on Minion::Backend::Pg 7.01.
 
 1.000     2017-04-14 14:54:28 EDT
   - Support retrying active jobs in retry_job.
