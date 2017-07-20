@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+2.001     2017-07-20 02:40:46 EDT
   - Bump Mojo::SQLite requirement to 3.000 to support sharing the database
     connection cache with existing Mojo::SQLite objects.
 
