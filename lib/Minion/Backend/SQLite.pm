@@ -315,8 +315,15 @@ Minion::Backend::SQLite - SQLite backend for Minion job queue
   use Minion;
   my $minion = Minion->new(SQLite => 'sqlite:test.db');
 
+  # Mojolicious (via Mojolicious::Plugin::Minion)
+  $self->plugin(Minion => { SQLite => 'sqlite:test.db' });
+
   # Mojolicious::Lite (via Mojolicious::Plugin::Minion)
   plugin Minion => { SQLite => 'sqlite:test.db' };
+
+  # Share the database connection cache
+  helper sqlite => sub { state $sqlite = Mojo::SQLite->new('sqlite:test.db') };
+  plugin Minion => { SQLite => app->sqlite };
 
 =head1 DESCRIPTION
 
