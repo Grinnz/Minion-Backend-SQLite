@@ -12,8 +12,7 @@ has 'sqlite';
 
 sub new {
   my $self = shift->SUPER::new(sqlite => Mojo::SQLite->new(@_));
-  my $sqlite = $self->sqlite->auto_migrate(1)->max_connections(1);
-  $sqlite->migrations->name('minion')->from_data;
+  $self->sqlite->auto_migrate(1)->migrations->name('minion')->from_data;
   return $self;
 }
 
@@ -349,6 +348,7 @@ implements the following new ones.
   my $backend = Minion::Backend::SQLite->new(':temp:');
   my $backend = Minion::Backend::SQLite->new('sqlite:test.db');
   my $backend = Minion::Backend::SQLite->new->tap(sub { $_->sqlite->from_filename('C:\\foo\\bar.db') });
+  my $backend = Minion::Backend::SQLite->new(Mojo::SQLite->new);
 
 Construct a new L<Minion::Backend::SQLite> object.
 
