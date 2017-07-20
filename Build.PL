@@ -91,7 +91,7 @@ EOW
       "requires" => {
         "Minion" => "7.01",
         "Mojo::SQLite" => "3.000",
-        "Mojolicious" => "6.0",
+        "Mojolicious" => "7.29",
         "Sys::Hostname" => 0,
         "Time::HiRes" => 0,
         "perl" => "5.010001"
