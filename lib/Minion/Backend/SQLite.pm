@@ -255,7 +255,7 @@ sub _try {
   my $tx = $db->begin;
   my $res = $db->query(
     qq{select id from minion_jobs as j
-       where delayed <= datetime('now')
+       where delayed <= datetime('now') and id = coalesce(?, id)
        and (json_array_length(parents) = 0 or not exists (
          select 1 from minion_jobs as parent, json_each(j.parents) as parent_id
          where parent.id = parent_id.value
@@ -263,7 +263,7 @@ sub _try {
        )) and queue in ($queues_in) and state = 'inactive'
        and task in ($tasks_in)
        order by priority desc, id
-       limit 1}, @$queues, @$tasks
+       limit 1}, $options->{id}, @$queues, @$tasks
   );
   my $job_id = ($res->arrays->first // [])->[0] // return undef;
   $db->query(
@@ -378,6 +378,12 @@ from C<inactive> to C<active> state, or return C<undef> if queues were empty.
 These options are currently available:
 
 =over 2
+
+=item id
+
+  id => '10023'
+
+Dequeue a specific job.
 
 =item queues
 
