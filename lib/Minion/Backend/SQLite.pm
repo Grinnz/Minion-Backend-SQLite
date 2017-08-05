@@ -188,11 +188,13 @@ sub retry_job {
 
   return !!$self->sqlite->db->query(
     q{update minion_jobs
-      set delayed = (datetime('now', ? || ' seconds')),
+      set attempts = coalesce(?, attempts),
+        delayed = (datetime('now', ? || ' seconds')),
         priority = coalesce(?, priority), queue = coalesce(?, queue),
         retried = datetime('now'), retries = retries + 1, state = 'inactive'
       where id = ? and retries = ?},
-    $options->{delay} // 0, @$options{qw(priority queue)}, $id, $retries
+    $options->{attempts}, $options->{delay} // 0,
+    @$options{qw(priority queue)}, $id, $retries
   )->rows;
 }
 
@@ -735,6 +737,12 @@ retried to change options.
 These options are currently available:
 
 =over 2
+
+=item attempts
+
+  attempts => 25
+
+Number of times performing this job will be attempted.
 
 =item delay
 
