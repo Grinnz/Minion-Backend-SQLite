@@ -2,12 +2,15 @@ package Minion::Backend::SQLite;
 use Mojo::Base 'Minion::Backend';
 
 use Carp 'croak';
+use List::Util 'min';
 use Mojo::SQLite;
+use Mojo::Util 'steady_time';
 use Sys::Hostname 'hostname';
 use Time::HiRes 'usleep';
 
 our $VERSION = '2.004';
 
+has dequeue_interval => 0.5;
 has 'sqlite';
 
 sub new {
@@ -29,7 +32,13 @@ sub broadcast {
 
 sub dequeue {
   my ($self, $id, $wait, $options) = @_;
-  usleep($wait * 1000000) unless my $job = $self->_try($id, $options);
+  my $job = $self->_try($id, $options);
+  unless ($job) {
+    my $int = $self->dequeue_interval;
+    my $end = steady_time + $wait;
+    usleep(min($int, $end - steady_time) * 1000000)
+      until steady_time >= $end or $job = $self->_try($id, $options);
+  }
   return $job || $self->_try($id, $options);
 }
 
@@ -339,6 +348,13 @@ will be created in a temporary directory.
 L<Minion::Backend::SQLite> inherits all attributes from L<Minion::Backend> and
 implements the following new ones.
 
+=head2 dequeue_interval
+
+  my $seconds = $backend->dequeue_interval;
+  $backend    = $backend->dequeue_interval($seconds);
+
+Interval in seconds between L</"dequeue"> attempts. Defaults to C<0.5>.
+
 =head2 sqlite
 
   my $sqlite = $backend->sqlite;
@@ -376,6 +392,8 @@ Broadcast remote control command to one or more workers.
 
 Wait a given amount of time in seconds for a job, dequeue it and transition
 from C<inactive> to C<active> state, or return C<undef> if queues were empty.
+Jobs will be checked for in intervals defined by L</"dequeue_interval"> until
+the timeout is reached.
 
 These options are currently available:
 

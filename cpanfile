@@ -1,4 +1,5 @@
 requires 'perl' => '5.010001';
+requires 'List::Util';
 requires 'Minion' => '7.05';
 requires 'Mojolicious' => '7.29';
 requires 'Mojo::SQLite' => '3.000';
