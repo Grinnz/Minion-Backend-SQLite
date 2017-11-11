@@ -1,6 +1,8 @@
 {{$NEXT}}
+
+2.004     2017-11-11 16:17:27 EST
   - Add dequeue_interval attribute and check for jobs in 0.5 second intervals
-    by default.
+    by default. (#10)
 
 2.003     2017-08-07 16:04:18 EDT
   - Fix tests for rethrown job exceptions in Minion 7.05.
