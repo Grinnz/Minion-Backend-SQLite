@@ -652,19 +652,11 @@ my $pid2 = $job2->start;
 my $pid3 = $job3->start;
 my $pid4 = $job4->start;
 my ($first, $second, $third, $fourth);
-if (eval { Minion->VERSION('6.0'); 1 }) {
-  usleep 50000
-    until $first ||= $job->is_finished
-    and $second  ||= $job2->is_finished
-    and $third   ||= $job3->is_finished
-    and $fourth  ||= $job4->is_finished;
-} else {
-  usleep 50000
-    until $first ||= $job->is_finished($pid)
-    and $second  ||= $job2->is_finished($pid2)
-    and $third   ||= $job3->is_finished($pid3)
-    and $fourth  ||= $job4->is_finished($pid4);
-}
+usleep 50000
+  until $first ||= $job->is_finished
+  and $second  ||= $job2->is_finished
+  and $third   ||= $job3->is_finished
+  and $fourth  ||= $job4->is_finished;
 is $minion->job($id)->info->{state}, 'finished', 'right state';
 is_deeply $minion->job($id)->info->{result}, {added => 21}, 'right result';
 is $minion->job($id2)->info->{state}, 'finished', 'right state';
