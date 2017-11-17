@@ -203,17 +203,50 @@ delay based on L<Minion/"backoff">.
 
 Transition from C<active> to C<finished> state.
 
-=head2 job_info
+=head2 list_jobs
 
-  my $job_info = $backend->job_info($job_id);
+  my $results = $backend->list_jobs($offset, $limit);
+  my $results = $backend->list_jobs($offset, $limit, {state => 'inactive'});
 
-Get information about a job, or return C<undef> if job does not exist.
+Returns the information about jobs in batches.
 
   # Check job state
-  my $state = $backend->job_info($job_id)->{state};
+  my $results = $backend->list_jobs(0, 1, {ids => [$job_id]});
+  my $state = $results->{jobs}[0]{state};
 
   # Get job result
-  my $result = $backend->job_info($job_id)->{result};
+  my $results = $backend->list_jobs(0, 1, {ids => [$job_id]});
+  my $result = $results->{jobs}[0]{result};
+
+These options are currently available:
+
+=over 2
+
+=item ids
+
+  ids => ['23', '24']
+
+List only jobs with these ids.
+
+=item queue
+
+  queue => 'important'
+
+List only jobs in this queue.
+
+=item state
+
+  state => 'inactive'
+
+List only jobs in this state.
+
+=item task
+
+  task => 'test'
+
+List only jobs for this task.
+
+=back
 
 These fields are currently available:
 
@@ -323,42 +356,70 @@ Id of worker that is processing the job.
 
 =back
 
-=head2 list_jobs
+=head2 list_workers
 
-  my $batch = $backend->list_jobs($offset, $limit);
-  my $batch = $backend->list_jobs($offset, $limit, {state => 'inactive'});
+  my $results = $backend->list_workers($offset, $limit);
+  my $results = $backend->list_workers($offset, $limit, {ids => [23]});
 
-Returns the same information as L</"job_info"> but in batches.
+Returns information about workers in batches.
+
+  # Check worker host
+  my $results = $backend->list_workers(0, 1, {ids => [$worker_id]});
+  my $host    = $results->{workers}[0]{host};
 
 These options are currently available:
 
 =over 2
 
-=item queue
+=item ids
 
-  queue => 'important'
+  ids => ['23', '24']
 
-List only jobs in this queue.
-
-=item state
-
-  state => 'inactive'
-
-List only jobs in this state.
-
-=item task
-
-  task => 'test'
-
-List only jobs for this task.
+List only workers with these ids.
 
 =back
 
-=head2 list_workers
+These fields are currently available:
 
-  my $batch = $backend->list_workers($offset, $limit);
+=over 2
 
-Returns the same information as L</"worker_info"> but in batches.
+=item host
+
+  host => 'localhost'
+
+Worker host.
+
+=item jobs
+
+  jobs => ['10023', '10024', '10025', '10029']
+
+Ids of jobs the worker is currently processing.
+
+=item notified
+
+  notified => 784111777
+
+Epoch time worker sent the last heartbeat.
+
+=item pid
+
+  pid => 12345
+
+Process id of worker.
+
+=item started
+
+  started => 784111777
+
+Epoch time worker was started.
+
+=item status
+
+  status => {queues => ['default', 'important']}
+
+Hash reference with whatever status information the worker would like to share.
+
+=back
 
 =head2 lock
 
@@ -498,8 +559,8 @@ Number of workers that are currently processing a job.
   delayed_jobs => 100
 
 Number of jobs in C<inactive> state that are scheduled to run at specific time
-in the future or have unresolved dependencies. Note that this field is
-EXPERIMENTAL and might change without warning!
+in the future. Note that this field is EXPERIMENTAL and might change without
+warning!
 
 =item enqueued_jobs
 
@@ -532,6 +593,12 @@ Number of jobs in C<inactive> state.
 
 Number of workers that are currently not processing a job.
 
+=item uptime
+
+  uptime => undef
+
+Uptime in seconds. Always undefined for SQLite.
+
 =back
 
 =head2 unlock
@@ -545,57 +612,6 @@ Release a named lock.
   $backend->unregister_worker($worker_id);
 
 Unregister worker.
-
-=head2 worker_info
-
-  my $worker_info = $backend->worker_info($worker_id);
-
-Get information about a worker, or return C<undef> if worker does not exist.
-
-  # Check worker host
-  my $host = $backend->worker_info($worker_id)->{host};
-
-These fields are currently available:
-
-=over 2
-
-=item host
-
-  host => 'localhost'
-
-Worker host.
-
-=item jobs
-
-  jobs => ['10023', '10024', '10025', '10029']
-
-Ids of jobs the worker is currently processing.
-
-=item notified
-
-  notified => 784111777
-
-Epoch time worker sent the last heartbeat.
-
-=item pid
-
-  pid => 12345
-
-Process id of worker.
-
-=item started
-
-  started => 784111777
-
-Epoch time worker was started.
-
-=item status
-
-  status => {queues => ['default', 'important']}
-
-Hash reference with whatever status information the worker would like to share.
-
-=back
 
 =head1 BUGS
 
