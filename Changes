@@ -1,4 +1,8 @@
 {{$NEXT}}
+  - Minion requirement bumped to 8.0.
+  - Remove job_info and worker_info methods.
+  - Support ids option and return total from list_jobs and list_workers methods.
+  - Add uptime field to stats method (always undef for SQLite).
 
 2.004     2017-11-11 16:17:27 EST
   - Add dequeue_interval attribute and check for jobs in 0.5 second intervals
