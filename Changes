@@ -1,4 +1,6 @@
 {{$NEXT}}
+
+3.000     2017-11-17 20:20:58 EST
   - Minion requirement bumped to 8.0.
   - Remove job_info and worker_info methods.
   - Support ids option and return total from list_jobs and list_workers methods.
