@@ -1,4 +1,6 @@
 {{$NEXT}}
+  - Fix condition in dequeue that could lead to calling usleep with a negative
+    time. (toratora)
 
 3.000     2017-11-17 20:20:58 EST
   - Minion requirement bumped to 8.0.
