@@ -98,13 +98,36 @@ sub list_jobs {
        strftime('%s',started) as started, state, task, worker
        from minion_jobs as j
        $where_str order by id desc limit ? offset ?},
-       @where_params, $limit, $offset
+    @where_params, $limit, $offset
   )->expand(json => [qw(args children notes parents result)])->hashes->to_array;
 
   my $total = $self->sqlite->db->query(qq{select count(*) from minion_jobs as j
     $where_str}, @where_params)->arrays->first->[0];
   
   return {jobs => $jobs, total => $total};
+}
+
+sub list_locks {
+  my ($self, $offset, $limit, $options) = @_;
+  
+  my (@where, @where_params);
+  if (defined(my $name = $options->{name})) {
+    push @where, 'name = ?';
+    push @where_params, $name;
+  }
+  
+  my $where_str = @where ? 'where ' . join(' and ', @where) : '';
+  
+  my $locks = $self->sqlite->db->query(
+    qq{select name, strftime('%s',expires) as expires from minion_locks
+       $where_str order by id desc limit ? offset ?},
+    @where_params, $limit, $offset
+  )->hashes->to_array;
+  
+  my $total = $self->sqlite->db->query(qq{select count(*) from minion_locks
+    $where_str}, @where_params)->arrays->first->[0];
+  
+  return {locks => $locks, total => $total};
 }
 
 sub list_workers {
@@ -125,7 +148,7 @@ sub list_workers {
        from minion_workers as w
        left join minion_jobs as j on j.worker = w.id and j.state = 'active'
        $where_str group by w.id order by w.id desc limit ? offset ?},
-       @where_params, $limit, $offset
+    @where_params, $limit, $offset
   )->expand(json => 'status')->hashes->to_array;
   $_->{jobs} = [split /,/, ($_->{jobs} // '')] for @$workers;
 
@@ -257,6 +280,7 @@ sub stats {
       count(case state when 'finished' then 1 end) as finished_jobs,
       count(case when state = 'inactive' and delayed > datetime('now')
         then 1 end) as delayed_jobs,
+      (select count(*) from minion_locks) as active_locks,
       count(distinct case when state = 'active' then worker end)
         as active_workers,
       ifnull((select seq from sqlite_sequence where name = 'minion_jobs'), 0)
@@ -696,6 +720,47 @@ Id of worker that is processing the job.
 
 =back
 
+=head2 list_locks
+
+  my $results = $backend->list_locks($offset, $limit);
+  my $results = $backend->list_locks($offset, $limit, {name => 'foo'});
+
+Returns information about locks in batches.
+
+  # Check expiration time
+  my $results = $backend->list_locks(0, 1, {name => 'foo'});
+  my $expires = $results->{locks}[0]{expires};
+
+These options are currently available:
+
+=over 2
+
+=item name
+
+  name => 'foo'
+
+List only locks with this name.
+
+=back
+
+These fields are currently available:
+
+=over 2
+
+=item expires
+
+  expires => 784111777
+
+Epoch time this lock will expire.
+
+=item name
+
+  name => 'foo'
+
+Lock name.
+
+=back
+
 =head2 list_workers
 
   my $results = $backend->list_workers($offset, $limit);
@@ -767,7 +832,8 @@ Hash reference with whatever status information the worker would like to share.
   my $bool = $backend->lock('foo', 3600, {limit => 20});
 
 Try to acquire a named lock that will expire automatically after the given
-amount of time in seconds.
+amount of time in seconds. An expiration time of C<0> can be used to check if a
+named lock already exists without creating one.
 
 These options are currently available:
 
@@ -876,7 +942,7 @@ Queue to put job in.
 
   my $stats = $backend->stats;
 
-Get statistics for jobs and workers.
+Get statistics for the job queue.
 
 These fields are currently available:
 
@@ -887,6 +953,12 @@ These fields are currently available:
   active_jobs => 100
 
 Number of jobs in C<active> state.
+
+=item active_locks
+
+  active_locks => 100
+
+Number of active named locks.
 
 =item active_workers
 
