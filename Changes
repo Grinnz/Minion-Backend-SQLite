@@ -1,5 +1,7 @@
 {{$NEXT}}
-  - Remove active_locks stats field again.
+
+3.003     2017-12-10 16:00:33 EST
+  - Remove active_locks stats field as it was incorrect.
   - Fix list_locks to exclude already expired locks.
 
 3.002     2017-12-09 21:42:19 EST
