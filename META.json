@@ -65,7 +65,7 @@
    "provides" : {
       "Minion::Backend::SQLite" : {
          "file" : "lib/Minion/Backend/SQLite.pm",
-         "version" : "3.002"
+         "version" : "3.003"
       }
    },
    "release_status" : "stable",
@@ -81,7 +81,7 @@
       },
       "x_IRC" : "irc://irc.perl.org/#mojo"
    },
-   "version" : "3.002",
+   "version" : "3.003",
    "x_Dist_Zilla" : {
       "perl" : {
          "version" : "5.026001"
@@ -275,7 +275,7 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v3.002",
+                  "tag" : "v3.003",
                   "tag_format" : "v%v",
                   "tag_message" : "v%v"
                },

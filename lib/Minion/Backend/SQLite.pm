@@ -111,12 +111,13 @@ sub list_locks {
   my ($self, $offset, $limit, $options) = @_;
   
   my (@where, @where_params);
+  push @where, q{expires > datetime('now')};
   if (defined(my $name = $options->{name})) {
     push @where, 'name = ?';
     push @where_params, $name;
   }
   
-  my $where_str = @where ? 'where ' . join(' and ', @where) : '';
+  my $where_str = 'where ' . join(' and ', @where);
   
   my $locks = $self->sqlite->db->query(
     qq{select name, strftime('%s',expires) as expires from minion_locks
@@ -280,7 +281,6 @@ sub stats {
       count(case state when 'finished' then 1 end) as finished_jobs,
       count(case when state = 'inactive' and delayed > datetime('now')
         then 1 end) as delayed_jobs,
-      (select count(*) from minion_locks) as active_locks,
       count(distinct case when state = 'active' then worker end)
         as active_workers,
       ifnull((select seq from sqlite_sequence where name = 'minion_jobs'), 0)
@@ -953,12 +953,6 @@ These fields are currently available:
   active_jobs => 100
 
 Number of jobs in C<active> state.
-
-=item active_locks
-
-  active_locks => 100
-
-Number of active named locks.
 
 =item active_workers
 

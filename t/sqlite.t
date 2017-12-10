@@ -177,8 +177,6 @@ ok $minion->unlock('baz'), 'unlocked';
 ok !$minion->unlock('baz'), 'not unlocked again';
 
 # List locks
-is $minion->stats->{active_locks}, 1, 'one active lock';
-SKIP: { skip 'These tests require Minion 8.04+', 16 unless eval { Minion->VERSION('8.04'); 1 };
 $results = $minion->backend->list_locks(0, 2);
 is $results->{locks}[0]{name},      'yada',       'right name';
 like $results->{locks}[0]{expires}, qr/^[\d.]+$/, 'expires';
@@ -188,7 +186,6 @@ $minion->unlock('yada');
 $minion->lock('yada', 3600, {limit => 2});
 $minion->lock('test', 3600, {limit => 1});
 $minion->lock('yada', 3600, {limit => 2});
-is $minion->stats->{active_locks}, 3, 'three active locks';
 $results = $minion->backend->list_locks(1, 1);
 is $results->{locks}[0]{name},      'test',       'right name';
 like $results->{locks}[0]{expires}, qr/^[\d.]+$/, 'expires';
@@ -201,9 +198,14 @@ is $results->{locks}[1]{name},      'yada',       'right name';
 like $results->{locks}[1]{expires}, qr/^[\d.]+$/, 'expires';
 is $results->{locks}[2], undef, 'no more locks';
 is $results->{total}, 2, 'two results';
-$minion->unlock($_) for qw(yada yada test);
+$minion->backend->sqlite->db->query(
+  q{update minion_locks set expires = datetime('now', '-1 second')
+    where name = 'yada'},
+);
+is $minion->backend->list_locks(0, 10, {name => 'yada'})->{total}, 0,
+  'no results';
+$minion->unlock('test');
 is $minion->backend->list_locks(0, 10)->{total}, 0, 'no results';
-} # end SKIP
 
 # Lock with guard
 ok my $guard = $minion->guard('foo', 3600, {limit => 1}), 'locked';
@@ -251,7 +253,6 @@ is $stats->{failed_jobs},      0, 'no failed jobs';
 is $stats->{finished_jobs},    0, 'no finished jobs';
 is $stats->{inactive_jobs},    0, 'no inactive jobs';
 is $stats->{delayed_jobs},     0, 'no delayed jobs';
-is $stats->{active_locks},     0, 'no active locks';
 is $stats->{uptime}, undef, 'uptime is undefined';
 SKIP: { skip 'Minion workers do not support fork emulation', 1 if HAS_PSEUDOFORK;
 $worker = $minion->worker->register;

@@ -1,4 +1,6 @@
 {{$NEXT}}
+  - Remove active_locks stats field again.
+  - Fix list_locks to exclude already expired locks.
 
 3.002     2017-12-09 21:42:19 EST
   - Add list_locks method.
