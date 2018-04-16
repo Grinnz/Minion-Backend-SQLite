@@ -8,7 +8,7 @@ use Mojo::Util 'steady_time';
 use Sys::Hostname 'hostname';
 use Time::HiRes 'usleep';
 
-our $VERSION = '4.000';
+our $VERSION = '4.001';
 
 has dequeue_interval => 0.5;
 has 'sqlite';
