@@ -191,7 +191,7 @@ is $results->{locks}[0]{name},      'test',       'right name';
 like $results->{locks}[0]{expires}, qr/^[\d.]+$/, 'expires';
 is $results->{locks}[1], undef, 'no more locks';
 is $results->{total}, 3, 'three results';
-$results = $minion->backend->list_locks(0, 10, {name => 'yada'});
+$results = $minion->backend->list_locks(0, 10, {names => ['yada']});
 is $results->{locks}[0]{name},      'yada',       'right name';
 like $results->{locks}[0]{expires}, qr/^[\d.]+$/, 'expires';
 is $results->{locks}[1]{name},      'yada',       'right name';
@@ -202,7 +202,7 @@ $minion->backend->sqlite->db->query(
   q{update minion_locks set expires = datetime('now', '-1 second')
     where name = 'yada'},
 );
-is $minion->backend->list_locks(0, 10, {name => 'yada'})->{total}, 0,
+is $minion->backend->list_locks(0, 10, {names => ['yada']})->{total}, 0,
   'no results';
 $minion->unlock('test');
 is $minion->backend->list_locks(0, 10)->{total}, 0, 'no results';
@@ -297,6 +297,34 @@ is $stats->{inactive_jobs},    0, 'no inactive jobs';
 is $stats->{delayed_jobs},     0, 'no delayed jobs';
 } # end SKIP
 
+# History
+TODO: { todo_skip 'Pending history support', 15;
+SKIP: { skip 'Minion workers do not support fork emulation', 15 if HAS_PSEUDOFORK;
+$minion->enqueue('fail');
+$worker = $minion->worker->register;
+$job    = $worker->dequeue(0);
+ok $job->fail, 'job failed';
+$worker->unregister;
+my $history = $minion->history;
+is $#{$history->{daily}}, 23, 'data for 24 hours';
+is $history->{daily}[-1]{finished_jobs}, 3, 'one failed job in the last hour';
+is $history->{daily}[-1]{failed_jobs}, 1,
+  'three finished jobs in the last hour';
+is $history->{daily}[0]{finished_jobs}, 0, 'no finished jobs 24 hours ago';
+is $history->{daily}[0]{failed_jobs},   0, 'no failed jobs 24 hours ago';
+ok defined $history->{daily}[0]{day},   'has day value';
+ok defined $history->{daily}[0]{hour},  'has hour value';
+ok defined $history->{daily}[1]{day},   'has day value';
+ok defined $history->{daily}[1]{hour},  'has hour value';
+ok defined $history->{daily}[12]{day},  'has day value';
+ok defined $history->{daily}[12]{hour}, 'has hour value';
+ok defined $history->{daily}[-1]{day},  'has day value';
+ok defined $history->{daily}[-1]{hour}, 'has hour value';
+isnt $history->{daily}[0]{hour}, $history->{daily}[1]{hours}, 'different hour';
+$job->remove;
+} # end SKIP
+} # end TODO
+
 # List jobs
 $id      = $minion->enqueue('add');
 $results = $minion->backend->list_jobs(0, 10);
@@ -338,24 +366,30 @@ is $batch->[3]{state},      'finished',   'right state';
 } # end SKIP
 is $batch->[3]{retries},    0,            'job has not been retried';
 ok !$batch->[4], 'no more results';
-$batch = $minion->backend->list_jobs(0, 10, {state => 'inactive'})->{jobs};
+$batch = $minion->backend->list_jobs(0, 10, {states => ['inactive']})->{jobs};
 is $batch->[0]{state},   'inactive', 'right state';
 is $batch->[0]{retries}, 0,          'job has not been retried';
 SKIP: { skip 'Minion workers do not support fork emulation', 1 if HAS_PSEUDOFORK;
 ok !$batch->[1], 'no more results';
 } # end SKIP
-$batch = $minion->backend->list_jobs(0, 10, {task => 'add'})->{jobs};
+$batch = $minion->backend->list_jobs(0, 10, {tasks => ['add']})->{jobs};
 is $batch->[0]{task},    'add', 'right task';
 is $batch->[0]{retries}, 0,     'job has not been retried';
 ok !$batch->[1], 'no more results';
-$batch = $minion->backend->list_jobs(0, 10, {queue => 'default'})->{jobs};
+$batch = $minion->backend->list_jobs(0, 10, {tasks => ['add', 'fail']})->{jobs};
+is $batch->[0]{task}, 'add',  'right task';
+is $batch->[1]{task}, 'fail', 'right task';
+is $batch->[2]{task}, 'fail', 'right task';
+is $batch->[3]{task}, 'fail', 'right task';
+ok !$batch->[4], 'no more results';
+$batch = $minion->backend->list_jobs(0, 10, {queues => ['default']})->{jobs};
 is $batch->[0]{queue}, 'default', 'right queue';
 is $batch->[1]{queue}, 'default', 'right queue';
 is $batch->[2]{queue}, 'default', 'right queue';
 is $batch->[3]{queue}, 'default', 'right queue';
 ok !$batch->[4], 'no more results';
 $batch
-  = $minion->backend->list_jobs(0, 10, {queue => 'does_not_exist'})->{jobs};
+  = $minion->backend->list_jobs(0, 10, {queues => ['does_not_exist']})->{jobs};
 is_deeply $batch, [], 'no results';
 $results = $minion->backend->list_jobs(0, 1);
 $batch = $results->{jobs};
@@ -510,7 +544,7 @@ $worker->unregister;
 } # end SKIP
 
 my $pid;
-SKIP: { skip 'Minion workers do not support fork emulation', 11 if HAS_PSEUDOFORK;
+SKIP: { skip 'Minion workers do not support fork emulation', 15 if HAS_PSEUDOFORK;
 # Events
 my $failed = 0;
 $finished = 0;
@@ -528,6 +562,13 @@ $minion->once(
             my $job = shift;
             return unless $job->task eq 'switcheroo';
             $job->task('add')->args->[-1] += 1;
+          }
+        );
+        $job->on(
+          finish => sub {
+            my $job = shift;
+            return unless defined(my $old = $job->info->{notes}{finish_count});
+            $job->note(finish_count => $old + 1, pid => $$);
           }
         );
       }
@@ -557,10 +598,15 @@ is $err,      "test\n", 'right error';
 is $failed,   1,        'failed event has been emitted once';
 is $finished, 1,        'finished event has been emitted once';
 $minion->add_task(switcheroo => sub { });
-$minion->enqueue(switcheroo => [5, 3]);
+$minion->enqueue(
+  switcheroo => [5, 3] => {notes => {finish_count => 0, before => 23}});
 $job = $worker->dequeue(0);
 $job->perform;
 is_deeply $job->info->{result}, {added => 9}, 'right result';
+is $job->info->{notes}{finish_count}, 1, 'finish event has been emitted once';
+ok $job->info->{notes}{pid},    'has a process id';
+isnt $job->info->{notes}{pid},  $$, 'different process id';
+is $job->info->{notes}{before}, 23, 'value still exists';
 $worker->unregister;
 } # end SKIP
 
@@ -630,7 +676,7 @@ $job = $worker->register->dequeue(0);
 $job->perform;
 is $job->info->{state}, 'finished', 'right state';
 ok $job->note(yada => ['works']), 'added metadata';
-ok !$minion->backend->note(-1, yada => ['failed']), 'not added metadata';
+ok !$minion->backend->note(-1, {yada => ['failed']}), 'not added metadata';
 my $notes = {
   foo => [4, 5, 6],
   bar  => {baz => [1, 2, 3]},
@@ -795,7 +841,7 @@ like $job->info->{result}, qr/Non-zero exit status/, 'right result';
 $worker->unregister;
 } # end SKIP
 
-SKIP: { skip 'Minion workers do not support fork emulation', 25 if HAS_PSEUDOFORK;
+SKIP: { skip 'Minion workers do not support fork emulation', 30 if HAS_PSEUDOFORK;
 # Job dependencies
 $worker = $minion->remove_after(0)->worker->register;
 is $minion->repair->stats->{finished_jobs}, 0, 'no finished jobs';
@@ -831,6 +877,15 @@ is $minion->repair->stats->{finished_jobs}, 0, 'no finished jobs';
 $id = $minion->enqueue(test => [] => {parents => [-1]});
 $job = $worker->dequeue(0);
 is $job->id, $id, 'right id';
+ok $job->finish, 'job finished';
+$id = $minion->enqueue(test => [] => {parents => [-1]});
+$job = $worker->dequeue(0);
+is $job->id, $id, 'right id';
+is_deeply $job->info->{parents}, [-1], 'right parents';
+$job->retry({parents => [-1, -2]});
+$job = $worker->dequeue(0);
+is $job->id, $id, 'right id';
+is_deeply $job->info->{parents}, [-1, -2], 'right parents';
 ok $job->finish, 'job finished';
 $worker->unregister;
 } # end SKIP

@@ -1,4 +1,9 @@
 {{$NEXT}}
+  - Minion requirement bumped to 9.0.
+  - Replace queue, state, and task options of list_jobs method with queues,
+    states, and tasks options.
+  - Replace name option of list_locks method with names option.
+  - Replace key/value arguments of note method with a hash reference.
 
 3.003     2017-12-10 16:00:33 EST
   - Remove active_locks stats field as it was incorrect.
