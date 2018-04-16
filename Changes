@@ -5,6 +5,7 @@
   - Replace name option of list_locks method with names option.
   - Replace key/value arguments of note method with a hash reference.
   - Add parents option to retry_job method.
+  - Re-add active_locks stats field.
 
 3.003     2017-12-10 16:00:33 EST
   - Remove active_locks stats field as it was incorrect.

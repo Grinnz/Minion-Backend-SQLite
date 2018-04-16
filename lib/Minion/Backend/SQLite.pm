@@ -294,6 +294,8 @@ sub stats {
       count(case state when 'finished' then 1 end) as finished_jobs,
       count(case when state = 'inactive' and delayed > datetime('now')
         then 1 end) as delayed_jobs,
+      (select count(*) from minion_locks where expires > datetime('now'))
+        as active_locks,
       count(distinct case when state = 'active' then worker end)
         as active_workers,
       ifnull((select seq from sqlite_sequence where name = 'minion_jobs'), 0)
@@ -973,6 +975,12 @@ These fields are currently available:
   active_jobs => 100
 
 Number of jobs in C<active> state.
+
+=item active_locks
+
+  active_locks => 100
+
+Number of active named locks.
 
 =item active_workers
 
