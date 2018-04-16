@@ -206,7 +206,7 @@ Transition from C<active> to C<finished> state.
 =head2 list_jobs
 
   my $results = $backend->list_jobs($offset, $limit);
-  my $results = $backend->list_jobs($offset, $limit, {state => 'inactive'});
+  my $results = $backend->list_jobs($offset, $limit, {states => ['inactive']});
 
 Returns the information about jobs in batches.
 
@@ -228,23 +228,23 @@ These options are currently available:
 
 List only jobs with these ids.
 
-=item queue
+=item queues
 
-  queue => 'important'
+  queue => ['important', 'unimportant']
 
-List only jobs in this queue.
+List only jobs in these queues.
 
-=item state
+=item states
 
-  state => 'inactive'
+  states => ['inactive', 'active']
 
-List only jobs in this state.
+List only jobs in these states.
 
-=item task
+=item tasks
 
-  task => 'test'
+  tasks => ['foo', 'bar']
 
-List only jobs for this task.
+List only jobs for these tasks.
 
 =back
 
@@ -359,23 +359,23 @@ Id of worker that is processing the job.
 =head2 list_locks
 
   my $results = $backend->list_locks($offset, $limit);
-  my $results = $backend->list_locks($offset, $limit, {name => 'foo'});
+  my $results = $backend->list_locks($offset, $limit, {names => ['foo']});
 
 Returns information about locks in batches.
 
   # Check expiration time
-  my $results = $backend->list_locks(0, 1, {name => 'foo'});
+  my $results = $backend->list_locks(0, 1, {names => ['foo']});
   my $expires = $results->{locks}[0]{expires};
 
 These options are currently available:
 
 =over 2
 
-=item name
+=item names
 
-  name => 'foo'
+  names => ['foo', 'bar']
 
-List only locks with this name.
+List only locks with these names.
 
 =back
 
@@ -486,10 +486,11 @@ defaults to C<1>.
 
 =head2 note
 
-  my $bool = $backend->note($job_id, foo => 'bar');
+  my $bool = $backend->note($job_id, {mojo => 'rocks', minion => 'too'});
 
-Change a metadata field for a job. It is currently an error to attempt to set a
-metadata field with a name containing the characters C<.>, C<[>, or C<]>.
+Change one or more metadata fields for a job. It is currently an error to
+attempt to set a metadata field with a name containing the characters C<.>,
+C<[>, or C<]>.
 
 =head2 receive
 
@@ -559,6 +560,12 @@ Number of times performing this job will be attempted.
   delay => 10
 
 Delay job for this many seconds (from now).
+
+=item parents
+
+  parents => [$id1, $id2, $id3]
+
+Jobs this job depends on.
 
 =item priority
 
