@@ -62,6 +62,43 @@ sub enqueue {
 sub fail_job   { shift->_update(1, @_) }
 sub finish_job { shift->_update(0, @_) }
 
+sub history {
+  my $self = shift;
+
+  my $db = $self->sqlite->db;
+  my $steps = $db->query(
+    q{with recursive generate_series(ts) as (
+        select datetime('now','-23 hours')
+        union all
+        select datetime(ts,'+1 hour') from generate_series
+        where datetime(ts,'+1 hour') <= datetime('now')
+      ) select ts, strftime('%Y%m%d',ts,'localtime') as date,
+        strftime('%H',ts,'localtime') as hour
+      from generate_series order by date, hour})->hashes;
+
+  my $counts = $db->query(
+    q{select strftime('%Y%m%d',finished,'localtime') as date,
+        strftime('%H',finished,'localtime') as hour,
+        count(case state when 'failed' then 1 end) as failed_jobs,
+        count(case state when 'finished' then 1 end) as finished_jobs
+      from minion_jobs
+      where finished > ? group by date, hour}, $steps->first->{ts})->hashes;
+
+  my %daily = map { ("$_->{date}-$_->{hour}" => $_) } @$counts;
+  my @daily_ordered;
+  foreach my $step (@$steps) {
+    my $hour_counts = $daily{"$step->{date}-$step->{hour}"} // {};
+    push @daily_ordered, {
+      date => $step->{date},
+      hour => $step->{hour},
+      failed_jobs => $hour_counts->{failed_jobs} // 0,
+      finished_jobs => $hour_counts->{finished_jobs} // 0,
+    };
+  }
+
+  return {daily => \@daily_ordered};
+}
+
 sub list_jobs {
   my ($self, $offset, $limit, $options) = @_;
 

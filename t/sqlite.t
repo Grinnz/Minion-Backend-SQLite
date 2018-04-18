@@ -308,7 +308,6 @@ is $stats->{delayed_jobs},     0, 'no delayed jobs';
 } # end SKIP
 
 # History
-TODO: { todo_skip 'Pending history support', 15;
 SKIP: { skip 'Minion workers do not support fork emulation', 15 if HAS_PSEUDOFORK;
 $minion->enqueue('fail');
 $worker = $minion->worker->register;
@@ -322,18 +321,17 @@ is $history->{daily}[-1]{failed_jobs}, 1,
   'three finished jobs in the last hour';
 is $history->{daily}[0]{finished_jobs}, 0, 'no finished jobs 24 hours ago';
 is $history->{daily}[0]{failed_jobs},   0, 'no failed jobs 24 hours ago';
-ok defined $history->{daily}[0]{day},   'has day value';
+ok defined $history->{daily}[0]{date},  'has date value';
 ok defined $history->{daily}[0]{hour},  'has hour value';
-ok defined $history->{daily}[1]{day},   'has day value';
+ok defined $history->{daily}[1]{date},  'has date value';
 ok defined $history->{daily}[1]{hour},  'has hour value';
-ok defined $history->{daily}[12]{day},  'has day value';
+ok defined $history->{daily}[12]{date}, 'has date value';
 ok defined $history->{daily}[12]{hour}, 'has hour value';
-ok defined $history->{daily}[-1]{day},  'has day value';
+ok defined $history->{daily}[-1]{date}, 'has date value';
 ok defined $history->{daily}[-1]{hour}, 'has hour value';
-isnt $history->{daily}[0]{hour}, $history->{daily}[1]{hours}, 'different hour';
+isnt $history->{daily}[0]{hour}, $history->{daily}[1]{hour}, 'different hour';
 $job->remove;
 } # end SKIP
-} # end TODO
 
 # List jobs
 $id      = $minion->enqueue('add');
