@@ -72,24 +72,25 @@ sub history {
         union all
         select datetime(ts,'+1 hour') from generate_series
         where datetime(ts,'+1 hour') <= datetime('now')
-      ) select ts, strftime('%Y%m%d',ts,'localtime') as date,
+      ) select ts, strftime('%s',ts) as epoch,
+        strftime('%d',ts,'localtime') as day,
         strftime('%H',ts,'localtime') as hour
-      from generate_series order by date, hour})->hashes;
+      from generate_series order by epoch})->hashes;
 
   my $counts = $db->query(
-    q{select strftime('%Y%m%d',finished,'localtime') as date,
+    q{select strftime('%d',finished,'localtime') as day,
         strftime('%H',finished,'localtime') as hour,
         count(case state when 'failed' then 1 end) as failed_jobs,
         count(case state when 'finished' then 1 end) as finished_jobs
       from minion_jobs
-      where finished > ? group by date, hour}, $steps->first->{ts})->hashes;
+      where finished > ? group by day, hour}, $steps->first->{ts})->hashes;
 
-  my %daily = map { ("$_->{date}-$_->{hour}" => $_) } @$counts;
+  my %daily = map { ("$_->{day}-$_->{hour}" => $_) } @$counts;
   my @daily_ordered;
   foreach my $step (@$steps) {
-    my $hour_counts = $daily{"$step->{date}-$step->{hour}"} // {};
+    my $hour_counts = $daily{"$step->{day}-$step->{hour}"} // {};
     push @daily_ordered, {
-      date => $step->{date},
+      epoch => $step->{epoch},
       hour => $step->{hour},
       failed_jobs => $hour_counts->{failed_jobs} // 0,
       finished_jobs => $hour_counts->{finished_jobs} // 0,
@@ -632,7 +633,8 @@ These fields are currently available:
 
 =item daily
 
-  daily => [{date => 12, hour => 20, finished_jobs => 95, failed_jobs => 2}, ...]
+  daily =>
+    [{epoch => 12345, hour => 20, finished_jobs => 95, failed_jobs => 2}, ...]
 
 Hourly counts for processed jobs from the past day.
 
