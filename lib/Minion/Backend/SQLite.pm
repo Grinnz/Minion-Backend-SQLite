@@ -91,7 +91,6 @@ sub history {
     my $hour_counts = $daily{"$step->{day}-$step->{hour}"} // {};
     push @daily_ordered, {
       epoch => $step->{epoch},
-      hour => $step->{hour},
       failed_jobs => $hour_counts->{failed_jobs} // 0,
       finished_jobs => $hour_counts->{finished_jobs} // 0,
     };
@@ -633,8 +632,7 @@ These fields are currently available:
 
 =item daily
 
-  daily =>
-    [{epoch => 12345, hour => 20, finished_jobs => 95, failed_jobs => 2}, ...]
+  daily => [{epoch => 12345, finished_jobs => 95, failed_jobs => 2}, ...]
 
 Hourly counts for processed jobs from the past day.
 
