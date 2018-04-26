@@ -665,7 +665,7 @@ List only jobs with these ids.
 
 =item queues
 
-  queue => ['important', 'unimportant']
+  queues => ['important', 'unimportant']
 
 List only jobs in these queues.
 
