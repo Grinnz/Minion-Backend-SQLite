@@ -240,7 +240,7 @@
                   "add_files_in" : [
                      "/"
                   ],
-                  "commit_msg" : "v%v%n%n%c"
+                  "commit_msg" : "%v%n%n%c"
                },
                "Dist::Zilla::Role::Git::DirtyFiles" : {
                   "allow_dirty" : [
@@ -274,9 +274,9 @@
                   "branch" : null,
                   "changelog" : "Changes",
                   "signed" : 0,
-                  "tag" : "v4.002",
-                  "tag_format" : "v%v",
-                  "tag_message" : "v%v"
+                  "tag" : "4.002",
+                  "tag_format" : "%v",
+                  "tag_message" : "%v"
                },
                "Dist::Zilla::Role::Git::Repo" : {
                   "git_version" : "2.14.4",
@@ -317,7 +317,7 @@
                      "dist.ini"
                   ],
                   "allow_dirty_match" : [
-                     "(?^:^(?:lib|script|bin)/)"
+                     "(?^:^)"
                   ],
                   "changelog" : "Changes"
                },
