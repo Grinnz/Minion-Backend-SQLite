@@ -592,7 +592,8 @@
       }
    },
    "x_contributors" : [
-      "Dan Book <grinnz@grinnz.com>"
+      "Dan Book <grinnz@grinnz.com>",
+      "yrjustice <43676784+yrjustice@users.noreply.github.com>"
    ],
    "x_generated_by_perl" : "v5.28.0",
    "x_serialization_backend" : "Cpanel::JSON::XS version 4.06"

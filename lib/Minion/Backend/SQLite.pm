@@ -283,14 +283,12 @@ sub repair {
   $fail->each(sub { $self->fail_job(@$_{qw(id retries)}, 'Worker went away') });
 
   # Old jobs with no unresolved dependencies
-
   $db->query(
     q{delete from minion_jobs
       where finished <= datetime('now', '-' || ? || ' seconds')
-	      and state = 'finished'
-        and id not IN (select distinct (json_each.value) from
-          minion_jobs, json_each(minion_jobs.parents)
-          where state <> 'finished' )}, $minion->remove_after);
+      and state = 'finished' and id not in (select distinct parent_id.value
+        from minion_jobs as child, json_each(child.parents) as parent_id
+        where child.state <> 'finished')}, $minion->remove_after);
 }
 
 sub reset {

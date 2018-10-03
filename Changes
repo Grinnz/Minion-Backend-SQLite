@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Optimize repair query (yrjustice, #15, #16)
 
 4.001     2018-04-21 19:29:24 EDT
   - Implement EXPERIMENTAL history method used for Minion Admin plugin history graph.
