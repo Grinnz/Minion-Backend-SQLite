@@ -277,7 +277,7 @@ sub repair {
   # Jobs with missing worker (can be retried)
   my $fail = $db->query(
     q{select id, retries from minion_jobs as j
-      where state = 'active'
+      where state = 'active' and queue != 'minion_foreground'
         and not exists (select 1 from minion_workers where id = j.worker)}
   )->hashes;
   $fail->each(sub { $self->fail_job(@$_{qw(id retries)}, 'Worker went away') });
