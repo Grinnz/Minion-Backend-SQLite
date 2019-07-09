@@ -135,7 +135,8 @@ sub list_jobs {
        strftime('%s',delayed) as delayed,
        strftime('%s',finished) as finished, notes, parents, priority, queue,
        result, strftime('%s',retried) as retried, retries,
-       strftime('%s',started) as started, state, task, worker
+       strftime('%s',started) as started, state, task,
+       strftime('%s','now') as time, worker
        from minion_jobs as j
        $where_str order by id desc limit ? offset ?},
     @where_params, $limit, $offset
@@ -790,6 +791,12 @@ Current job state, usually C<active>, C<failed>, C<finished> or C<inactive>.
   task => 'foo'
 
 Task name.
+
+=item time
+
+  time => 78411177
+
+Current time.
 
 =item worker
 
