@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Allow fields to be removed with note method.
 
 4.004     2019-07-09 00:53:20 EDT
   - Add time field to list_jobs method.

@@ -674,7 +674,7 @@ is $job->info->{result}, "Intentional failure!\n", 'right result';
 $worker->unregister;
 } # end SKIP
 
-SKIP: { skip 'Minion workers do not support fork emulation', 5 if HAS_PSEUDOFORK;
+SKIP: { skip 'Minion workers do not support fork emulation', 7 if HAS_PSEUDOFORK;
 # Nested data structures
 $minion->add_task(
   nested => sub {
@@ -702,6 +702,9 @@ my $notes = {
 };
 is_deeply $job->info->{notes}, $notes, 'right metadata';
 is_deeply $job->info->{result}, [{23 => 'testtesttest'}], 'right structure';
+ok $job->note(yada => undef, bar => undef), 'removed metadata';
+$notes = {foo => [4, 5, 6], baz => 'yada'};
+is_deeply $job->info->{notes}, $notes, 'right metadata';
 $worker->unregister;
 } # end SKIP
 
