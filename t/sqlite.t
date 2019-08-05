@@ -404,6 +404,13 @@ is $batch->[1]{queue}, 'default', 'right queue';
 is $batch->[2]{queue}, 'default', 'right queue';
 is $batch->[3]{queue}, 'default', 'right queue';
 ok !$batch->[4], 'no more results';
+TODO: { local $TODO = 'filtering jobs by notes not yet implemented';
+  $id2   = $minion->enqueue('test' => [] => {notes => {is_test => 1}});
+  eval { $batch = $minion->backend->list_jobs(0, 10, {notes => ['is_test']})->{jobs} };
+  is $batch->[0]{task}, 'test', 'right task';
+  ok !$batch->[4], 'no more results';
+  ok $minion->job($id2)->remove, 'job removed';
+}
 $batch
   = $minion->backend->list_jobs(0, 10, {queues => ['does_not_exist']})->{jobs};
 is_deeply $batch, [], 'no results';

@@ -108,6 +108,9 @@ sub list_jobs {
     push @where, @$ids ? "id in ($ids_in)" : 'id is null';
     push @where_params, @$ids;
   }
+  if (defined(my $notes = $options->{notes})) {
+    croak 'Listing jobs by existence of notes is unimplemented';
+  }
   if (defined(my $queues = $options->{queues})) {
     my $queues_in = join ',', ('?')x@$queues;
     push @where, @$queues ? "queue in ($queues_in)" : 'queue is null';
