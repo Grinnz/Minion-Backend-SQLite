@@ -534,9 +534,9 @@ defaults to C<1>.
 
   my $bool = $backend->note($job_id, {mojo => 'rocks', minion => 'too'});
 
-Change one or more metadata fields for a job. It is currently an error to
-attempt to set a metadata field with a name containing the characters C<.>,
-C<[>, or C<]>.
+Change one or more metadata fields for a job. Setting a value to C<undef> will
+remove the field. It is currently an error to attempt to set a metadata field
+with a name containing the characters C<.>, C<[>, or C<]>.
 
 =head2 receive
 
