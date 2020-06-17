@@ -305,14 +305,19 @@ sub repair {
 }
 
 sub reset {
-  my $db = shift->sqlite->db;
-  my $tx = $db->begin;
-  $db->query('delete from minion_jobs');
-  $db->query('delete from minion_locks');
-  $db->query('delete from minion_workers');
-  $db->query(q{delete from sqlite_sequence
-    where name in ('minion_jobs','minion_locks','minion_workers')});
-  $tx->commit;
+  my ($self, $options) = (shift, shift // {});
+  my $db = $self->sqlite->db;
+  if ($options->{all}) {
+    my $tx = $db->begin;
+    $db->query('delete from minion_jobs');
+    $db->query('delete from minion_locks');
+    $db->query('delete from minion_workers');
+    $db->query(q{delete from sqlite_sequence
+      where name in ('minion_jobs','minion_locks','minion_workers')});
+    $tx->commit;
+  } elsif ($options->{locks}) {
+    $db->query('delete from minion_locks');
+  }
 }
 
 sub retry_job {
@@ -1006,9 +1011,27 @@ Repair worker registry and job queue if necessary.
 
 =head2 reset
 
-  $backend->reset;
+  $backend->reset({all => 1});
 
 Reset job queue.
+
+These options are currently available:
+
+=over 2
+
+=item all
+
+  all => 1
+
+Reset everything.
+
+=item locks
+
+  locks => 1
+
+Reset only locks.
+
+=back
 
 =head2 retry_job
 
