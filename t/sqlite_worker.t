@@ -39,12 +39,13 @@ subtest 'Signals' => sub {
       my $job     = shift;
       my $forever = 1;
       my $message = 'signals:';
+      my %received;
       local $SIG{INT}  = sub { $forever = 0 };
-      local $SIG{USR1} = sub { $message .= ' usr1' };
-      local $SIG{USR2} = sub { $message .= ' usr2' };
+      local $SIG{USR1} = sub { $received{usr1}++ };
+      local $SIG{USR2} = sub { $received{usr2}++ };
       $job->minion->broadcast('kill', [$_, $job->id]) for qw(USR1 USR2 INT);
       while ($forever) { sleep 1 }
-      $job->finish({msg => $message});
+      $job->finish({msg => 'signals: ' . join(' ', sort keys %received)});
     }
   );
   my $worker = $minion->worker;
