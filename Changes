@@ -2,6 +2,8 @@
   - Minion requirement bumped to 10.0.
   - Changed reset method to require options for what to reset and allow for
     locks to be reset without resetting the whole queue.
+  - Added before options to list_jobs and list_workers methods to support
+    iterating jobs and workers.
 
 4.005     2019-08-05 11:00:01 EDT
   - Allow fields to be removed with note method.

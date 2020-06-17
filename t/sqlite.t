@@ -158,6 +158,37 @@ $worker->unregister;
 $worker2->unregister;
 } # end SKIP
 
+# Iterate workers
+$minion->reset({all => 1});
+$worker  = $minion->worker->status({test => 'one'})->register;
+$worker2 = $minion->worker->status({test => 'two'})->register;
+my $worker3 = $minion->worker->status({test => 'three'})->register;
+my $worker4 = $minion->worker->status({test => 'four'})->register;
+my $worker5 = $minion->worker->status({test => 'five'})->register;
+my $workers = $minion->workers->fetch(2);
+is $workers->options->{before}, undef, 'no before';
+is $workers->next->{status}{test}, 'five', 'right status';
+is $workers->options->{before}, 4, 'before 4';
+is $workers->next->{status}{test}, 'four',  'right status';
+is $workers->next->{status}{test}, 'three', 'right status';
+is $workers->options->{before}, 2, 'before 2';
+is $workers->next->{status}{test}, 'two', 'right status';
+is $workers->next->{status}{test}, 'one', 'right status';
+is $workers->options->{before}, 1, 'before 1';
+is $workers->next, undef, 'no more results';
+$workers = $minion->workers({ids => [2, 4, 1]});
+is $workers->options->{before}, undef, 'no before';
+is $workers->next->{status}{test}, 'four', 'right status';
+is $workers->options->{before}, 1, 'before 1';
+is $workers->next->{status}{test}, 'two', 'right status';
+is $workers->next->{status}{test}, 'one', 'right status';
+is $workers->next, undef, 'no more results';
+$worker->unregister;
+$worker2->unregister;
+$worker3->unregister;
+$worker4->unregister;
+$worker5->unregister;
+
 # Exclusive lock
 ok $minion->lock('foo', 3600), 'locked';
 ok !$minion->lock('foo', 3600), 'not locked again';
@@ -239,6 +270,7 @@ undef $guard;
 undef $guard3;
 
 # Reset (locks)
+$minion->enqueue('test');
 $minion->lock('test', 3600);
 $minion->worker->register;
 ok $minion->backend->list_jobs(0, 1)->{total},    'jobs';
@@ -438,6 +470,31 @@ is $batch->[0]{state},   'finished', 'right state';
 is $batch->[0]{retries}, 1,          'job has been retried';
 } # end SKIP
 ok !$batch->[1], 'no more results';
+
+# Iterate jobs
+my $jobs = $minion->jobs;
+is $jobs->next->{task},      'add',  'right task';
+is $jobs->options->{before}, 1,      'before 1';
+is $jobs->next->{task},      'fail', 'right task';
+is $jobs->next->{task},      'fail', 'right task';
+is $jobs->next->{task},      'fail', 'right task';
+is $jobs->next, undef, 'no more results';
+$jobs = $minion->jobs->fetch(2);
+is $jobs->options->{before}, undef,  'no before';
+is $jobs->next->{task},      'add',  'right task';
+is $jobs->options->{before}, 3,      'before 3';
+is $jobs->next->{task},      'fail', 'right task';
+is $jobs->options->{before}, 3,      'before 3';
+is $jobs->next->{task},      'fail', 'right task';
+is $jobs->options->{before}, 1,      'before 1';
+is $jobs->next->{task},      'fail', 'right task';
+is $jobs->options->{before}, 1,      'before 1';
+is $jobs->next, undef, 'no more results';
+$jobs = $minion->jobs({states => ['inactive']});
+is $jobs->next->{task}, 'add', 'right task';
+is $jobs->next, undef, 'no more results';
+$jobs = $minion->jobs({states => ['active']});
+is $jobs->next, undef, 'no more results';
 ok $minion->job($id)->remove, 'job removed';
 
 # Enqueue, dequeue and perform

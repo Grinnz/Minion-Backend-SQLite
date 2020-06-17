@@ -103,6 +103,10 @@ sub list_jobs {
   my ($self, $offset, $limit, $options) = @_;
 
   my (@where, @where_params);
+  if (defined(my $before = $options->{before})) {
+    push @where, 'id < ?';
+    push @where_params, $before;
+  }
   if (defined(my $ids = $options->{ids})) {
     my $ids_in = join ',', ('?')x@$ids;
     push @where, @$ids ? "id in ($ids_in)" : 'id is null';
@@ -180,6 +184,10 @@ sub list_workers {
   my ($self, $offset, $limit, $options) = @_;
 
   my (@where, @where_params);
+  if (defined(my $before = $options->{before})) {
+    push @where, 'w.id < ?';
+    push @where_params, $before;
+  }
   if (defined(my $ids = $options->{ids})) {
     my $ids_in = join ',', ('?')x@$ids;
     push @where, @$ids ? "w.id in ($ids_in)" : 'w.id is null';
@@ -676,6 +684,12 @@ These options are currently available:
 
 =over 2
 
+=item before
+
+  before => 23
+
+List only jobs before this id.
+
 =item ids
 
   ids => ['23', '24']
@@ -883,6 +897,12 @@ Returns information about workers in batches.
 These options are currently available:
 
 =over 2
+
+=item before
+
+  before => 23
+
+List only workers before this id.
 
 =item ids
 
