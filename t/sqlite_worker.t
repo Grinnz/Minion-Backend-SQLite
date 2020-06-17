@@ -38,7 +38,6 @@ subtest 'Signals' => sub {
     int => sub {
       my $job     = shift;
       my $forever = 1;
-      my $message = 'signals:';
       my %received;
       local $SIG{INT}  = sub { $forever = 0 };
       local $SIG{USR1} = sub { $received{usr1}++ };
