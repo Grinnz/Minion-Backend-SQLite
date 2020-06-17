@@ -95,14 +95,17 @@ subtest 'Bundled static files' => sub {
   $t->get_ok('/minion/fontawesome/fontawesome.css')->status_is(200)->content_type_is('text/css');
   $t->get_ok('/minion/popper/popper.js')->status_is(200) ->content_type_is('application/javascript');
   $t->get_ok('/minion/webfonts/fa-brands-400.eot')->status_is(200);
+  $t->get_ok('/minion/webfonts/fa-brands-400.svg')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-brands-400.ttf')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-brands-400.woff')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-brands-400.woff2')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-regular-400.eot')->status_is(200);
+  $t->get_ok('/minion/webfonts/fa-regular-400.svg')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-regular-400.ttf')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-regular-400.woff')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-regular-400.woff2')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-solid-900.eot')->status_is(200);
+  $t->get_ok('/minion/webfonts/fa-solid-900.svg')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-solid-900.ttf')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-solid-900.woff')->status_is(200);
   $t->get_ok('/minion/webfonts/fa-solid-900.woff2')->status_is(200);

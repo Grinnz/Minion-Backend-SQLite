@@ -7,8 +7,8 @@ use Test::More;
 use Config;
 use Minion;
 use Mojo::IOLoop;
-use Sys::Hostname 'hostname';
-use Time::HiRes qw(time usleep);
+use Sys::Hostname qw(hostname);
+use Time::HiRes qw(usleep);
 
 use constant HAS_PSEUDOFORK => $Config{d_pseudofork};
 
@@ -40,6 +40,59 @@ subtest 'Register and unregister' => sub {
   is $worker->register->info->{host}, $host, 'right host';
   is $worker->info->{pid}, $$, 'right pid';
   is $worker->unregister->info, undef, 'no information';
+};
+
+subtest 'Job results' => sub {
+  plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
+  $minion->add_task(test => sub { });
+  my $worker = $minion->worker->register;
+  my $id     = $minion->enqueue('test');
+  my (@finished, @failed);
+  my $promise = $minion->result_p($id, {interval => 0})->then(sub { @finished = @_ })->catch(sub { @failed = @_ });
+  my $job     = $worker->dequeue(0);
+  is $job->id, $id, 'same id';
+  Mojo::IOLoop->one_tick;
+  is_deeply \@finished, [], 'not finished';
+  is_deeply \@failed,   [], 'not failed';
+  $job->finish({just => 'works!'});
+  $job->note(foo => 'bar');
+  $promise->wait;
+  is_deeply $finished[0]{result}, {just => 'works!'}, 'right result';
+  is_deeply $finished[0]{notes},  {foo  => 'bar'},    'right note';
+  ok !$finished[1], 'no more results';
+  is_deeply \@failed, [], 'not failed';
+
+  (@finished, @failed) = ();
+  my $id2 = $minion->enqueue('test');
+  $promise = $minion->result_p($id2, {interval => 0})->then(sub { @finished = @_ })->catch(sub { @failed = @_ });
+  $job     = $worker->dequeue(0);
+  is $job->id, $id2, 'same id';
+  $job->fail({works => 'too!'});
+  $promise->wait;
+  is_deeply \@finished, [], 'not finished';
+  is_deeply $failed[0]{result}, {works => 'too!'}, 'right result';
+  ok !$failed[1], 'no more results';
+  $worker->unregister;
+
+  (@finished, @failed) = ();
+  $minion->result_p($id)->then(sub { @finished = @_ })->catch(sub { @failed = @_ })->wait;
+  is_deeply $finished[0]{result}, {just => 'works!'}, 'right result';
+  is_deeply $finished[0]{notes},  {foo  => 'bar'},    'right note';
+  ok !$finished[1], 'no more results';
+  is_deeply \@failed, [], 'not failed';
+
+  (@finished, @failed) = ();
+  $minion->job($id)->retry;
+  $minion->result_p($id)->timeout(0.25)->then(sub { @finished = @_ })->catch(sub { @failed = @_ })->wait;
+  is_deeply \@finished, [], 'not finished';
+  is_deeply \@failed, ['Promise timeout'], 'failed';
+  Mojo::IOLoop->start;
+
+  (@finished, @failed) = ();
+  $minion->job($id)->remove;
+  $minion->result_p($id)->then(sub { @finished = (@_, 'finished') })->catch(sub { @failed = (@_, 'failed') })->wait;
+  is_deeply \@finished, ['finished'], 'job no longer exists';
+  is_deeply \@failed, [], 'not failed';
 };
 
 subtest 'Repair missing worker' => sub {
@@ -668,16 +721,19 @@ subtest 'Delayed jobs' => sub {
     like $job->info->{delayed}, qr/^[\d.]+$/, 'has delayed timestamp';
     ok $job->finish, 'job finished';
     ok $job->retry,  'job retried';
-    ok $minion->job($id)->info->{delayed} < time, 'no delayed timestamp';
+    my $info = $minion->job($id)->info;
+    ok $info->{delayed} <= $info->{retried}, 'no delayed timestamp';
     ok $job->remove, 'job removed';
     ok !$job->retry, 'job not retried';
     my $id = $minion->enqueue(add => [6, 9]);
     $job = $worker->dequeue(0);
-    ok $job->info->{delayed} < time, 'no delayed timestamp';
+    $info = $minion->job($id)->info;
+    ok $info->{delayed} <= $info->{created}, 'no delayed timestamp';
     ok $job->fail, 'job failed';
     ok $job->retry({delay => 100}), 'job retried with delay';
-    is $job->info->{retries}, 1, 'job has been retried once';
-    ok $job->info->{delayed} > time, 'delayed timestamp';
+    $info = $minion->job($id)->info;
+    is $info->{retries}, 1, 'job has been retried once';
+    ok $info->{delayed} > $info->{retried}, 'delayed timestamp';
     ok $minion->job($id)->remove, 'job has been removed';
     $worker->unregister;
   }
@@ -685,8 +741,9 @@ subtest 'Delayed jobs' => sub {
 
 subtest 'Events' => sub {
   plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
-  my $pid;
+  my ($enqueue, $pid_start, $pid_stop);
   my ($failed, $finished) = (0, 0);
+  $minion->once(enqueue => sub { $enqueue = pop });
   $minion->once(
     worker => sub {
       my ($minion, $worker) = @_;
@@ -695,7 +752,8 @@ subtest 'Events' => sub {
           my ($worker, $job) = @_;
           $job->on(failed   => sub { $failed++ });
           $job->on(finished => sub { $finished++ });
-          $job->on(spawn    => sub { $pid = pop });
+          $job->on(spawn    => sub { $pid_start = pop });
+          $job->on(reap     => sub { $pid_stop = pop });
           $job->on(
             start => sub {
               my $job = shift;
@@ -707,7 +765,14 @@ subtest 'Events' => sub {
             finish => sub {
               my $job = shift;
               return unless defined(my $old = $job->info->{notes}{finish_count});
-              $job->note(finish_count => $old + 1, pid => $$);
+              $job->note(finish_count => $old + 1, finish_pid => $$);
+            }
+          );
+          $job->on(
+            cleanup => sub {
+              my $job = shift;
+              return unless defined(my $old = $job->info->{notes}{finish_count});
+              $job->note(cleanup_count => $old + 1, cleanup_pid => $$);
             }
           );
         }
@@ -715,7 +780,8 @@ subtest 'Events' => sub {
     }
   );
   my $worker = $minion->worker->register;
-  $minion->enqueue(add => [3, 3]);
+  my $id     = $minion->enqueue(add => [3, 3]);
+  is $enqueue, $id, 'enqueue event has been emitted';
   $minion->enqueue(add => [4, 3]);
   my $job = $worker->dequeue(0);
   is $failed,   0, 'failed event has not been emitted';
@@ -727,7 +793,9 @@ subtest 'Events' => sub {
   is $result,   'Everything is fine!', 'right result';
   is $failed,   0,                     'failed event has not been emitted';
   is $finished, 1,                     'finished event has been emitted once';
-  isnt $pid, $$, 'new process id';
+  isnt $pid_start, $$,      'new process id';
+  isnt $pid_stop,  $$,      'new process id';
+  is $pid_start, $pid_stop, 'same process id';
   $job = $worker->dequeue(0);
   my $err;
   $job->on(failed => sub { $err = pop });
@@ -742,9 +810,12 @@ subtest 'Events' => sub {
   $job->perform;
   is_deeply $job->info->{result}, {added => 9}, 'right result';
   is $job->info->{notes}{finish_count}, 1, 'finish event has been emitted once';
-  ok $job->info->{notes}{pid},    'has a process id';
-  isnt $job->info->{notes}{pid},  $$, 'different process id';
+  ok $job->info->{notes}{finish_pid}, 'has a process id';
+  isnt $job->info->{notes}{finish_pid},  $$, 'different process id';
   is $job->info->{notes}{before}, 23, 'value still exists';
+  is $job->info->{notes}{cleanup_count}, 2, 'cleanup event has been emitted once';
+  ok $job->info->{notes}{cleanup_pid},   'has a process id';
+  isnt $job->info->{notes}{cleanup_pid}, $$, 'different process id';
   $worker->unregister;
 };
 
@@ -968,7 +1039,12 @@ subtest 'Perform jobs concurrently' => sub {
 
 subtest 'Stopping jobs' => sub {
   plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
-  $minion->add_task(long_running => sub { sleep 1000 });
+  $minion->add_task(
+    long_running => sub {
+      shift->note(started => 1);
+      sleep 1000;
+    }
+  );
   my $worker = $minion->worker->register;
   $minion->enqueue('long_running');
   my $job = $worker->dequeue(0);
@@ -977,6 +1053,18 @@ subtest 'Stopping jobs' => sub {
   $job->stop;
   usleep 5000 until $job->is_finished;
   is $job->info->{state}, 'failed', 'right state';
+  like $job->info->{result}, qr/Non-zero exit status/, 'right result';
+  $minion->enqueue('long_running');
+  $job = $worker->dequeue(0);
+  ok $job->start->pid, 'has a process id';
+  ok !$job->is_finished, 'job is not finished';
+  usleep 5000 until $job->info->{notes}{started};
+  $job->kill('USR1');
+  $job->kill('USR2');
+  is $job->info->{state}, 'active', 'right state';
+  $job->kill('INT');
+  usleep 5000 until $job->is_finished;
+  is $job->info->{state},    'failed',                 'right state';
   like $job->info->{result}, qr/Non-zero exit status/, 'right result';
   $worker->unregister;
 };
@@ -1090,6 +1178,36 @@ subtest 'Worker remote control commands' => sub {
   is_deeply \@commands, [$worker->id, [23], [1, [2], {3 => 'three'}], $worker2->id], 'right structure';
   $_->unregister for $worker, $worker2;
   ok !$minion->backend->broadcast('test_id', []), 'command not sent';
+};
+
+subtest 'Single process worker' => sub {
+  plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
+  my $worker = $minion->repair->worker->register;
+  $minion->add_task(
+    good_job => sub {
+      my ($job, $message) = @_;
+      $job->finish("$message Mojo!");
+    }
+  );
+  $minion->add_task(
+    bad_job => sub {
+      my ($job, $message) = @_;
+      die 'Bad job!';
+    }
+  );
+  my $id  = $minion->enqueue('good_job', ['Hello']);
+  my $id2 = $minion->enqueue('bad_job',  ['Hello']);
+  while (my $job = $worker->dequeue(0)) {
+    next unless my $err = $job->execute;
+    $job->fail("Error: $err");
+  }
+  $worker->unregister;
+  my $job = $minion->job($id);
+  is $job->info->{state},  'finished',    'right state';
+  is $job->info->{result}, 'Hello Mojo!', 'right result';
+  my $job2 = $minion->job($id2);
+  is $job2->info->{state},    'failed',            'right state';
+  like $job2->info->{result}, qr/Error: Bad job!/, 'right error';
 };
 
 $minion->reset({all => 1});
