@@ -84,7 +84,7 @@ EOW
         "Dan Book <dbook\@cpan.org>"
       ],
       "dist_name" => "Minion-Backend-SQLite",
-      "dist_version" => "v5.0.0",
+      "dist_version" => "v5.0.1",
       "license" => "artistic_2",
       "module_name" => "Minion::Backend::SQLite",
       "recursive_test_files" => 1,

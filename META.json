@@ -64,7 +64,7 @@
    "provides" : {
       "Minion::Backend::SQLite" : {
          "file" : "lib/Minion/Backend/SQLite.pm",
-         "version" : "v5.0.0"
+         "version" : "v5.0.1"
       }
    },
    "release_status" : "stable",
@@ -80,7 +80,7 @@
       },
       "x_IRC" : "irc://irc.freenode.net/#mojo"
    },
-   "version" : "v5.0.0",
+   "version" : "v5.0.1",
    "x_contributors" : [
       "Dan Book <grinnz@grinnz.com>",
       "yrjustice <43676784+yrjustice@users.noreply.github.com>"
