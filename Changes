@@ -1,4 +1,6 @@
 {{$NEXT}}
+  - Minion requirement bumped to 10.10.
+  - Support removing stuck jobs in repair method.
   - Added EXPERIMENTAL sequence option to enqueue method and sequences option to list_jobs method
     to support job sequences.
   - Added next and previous fields to list_jobs method.

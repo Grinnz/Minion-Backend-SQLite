@@ -171,6 +171,18 @@ subtest 'Repair old jobs' => sub {
   ok !$minion->job($id3), 'job has been cleaned up';
 };
 
+subtest 'Repair stuck jobs' => sub {
+  $minion->add_task(test => sub { });
+  my $id = $minion->enqueue('test');
+  $minion->backend->sqlite->db->query(
+    q{update minion_jobs set delayed = datetime('now', '-' || ? || ' seconds') where id = ?},
+    $minion->stuck_after + 1, $id);
+  $minion->repair;
+  my $job = $minion->job($id);
+  is $job->info->{state},  'failed',                     'job is no longer active';
+  is $job->info->{result}, 'Job appears stuck in queue', 'right result';
+};
+
 subtest 'List workers' => sub {
   plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
   my $worker = $minion->worker->register;

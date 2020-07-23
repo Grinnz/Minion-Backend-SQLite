@@ -310,6 +310,12 @@ sub repair {
   )->hashes;
   $fail->each(sub { $self->fail_job(@$_{qw(id retries)}, 'Worker went away') });
 
+  # Jobs in queue without workers or not enough workers (cannot be retried and requires admin attention)
+  $db->query(
+    q{update minion_jobs set state = 'failed', result = json_quote('Job appears stuck in queue')
+      where state = 'inactive' and delayed < datetime('now', '-' || ? || ' seconds')},
+    $minion->stuck_after);
+
   # Old jobs with no unresolved dependencies
   $db->query(
     q{delete from minion_jobs
