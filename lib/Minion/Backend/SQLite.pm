@@ -411,10 +411,11 @@ sub _try {
        where delayed <= datetime('now') and id = coalesce(?, id)
        and (json_array_length(parents) = 0 or not exists (
          select 1 from minion_jobs as parent, json_each(j.parents) as parent_id
-         where parent.id = parent_id.value and (
-           parent.state = 'active' or (parent.state = 'failed' and not j.lax)
-           or (parent.state = 'inactive' and (parent.expires is null or parent.expires > datetime('now')))
-         )
+         where parent.id = parent_id.value and case parent.state
+           when 'active' then 1
+           when 'failed' then not j.lax
+           when 'inactive' then (parent.expires is null or parent.expires > datetime('now'))
+         end
        )) and queue in ($queues_in) and state = 'inactive' and task in ($tasks_in)
        and (expires is null or expires > datetime('now'))
        order by priority desc, id
