@@ -444,10 +444,7 @@ sub _update {
   )->rows > 0;
   
   my $row = $db->query('select attempts from minion_jobs where id = ?', $id)->array;
-  return 1 if !$fail || (my $attempts = $row->[0]) == 1;
-  return 1 if $retries >= ($attempts - 1);
-  my $delay = $self->minion->backoff->($retries);
-  return $self->retry_job($id, $retries, {delay => $delay});
+  return $fail ? $self->auto_retry_job($id, $retries, $row->[0]) : 1;
 }
 
 1;

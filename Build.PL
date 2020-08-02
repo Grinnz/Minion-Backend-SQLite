@@ -90,7 +90,7 @@ EOW
       "recursive_test_files" => 1,
       "requires" => {
         "List::Util" => 0,
-        "Minion" => "10.10",
+        "Minion" => "10.13",
         "Mojo::SQLite" => "3.000",
         "Mojolicious" => "7.29",
         "Sys::Hostname" => 0,

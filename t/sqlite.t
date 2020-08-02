@@ -277,15 +277,9 @@ subtest 'Exclusive lock' => sub {
   ok !$minion->unlock('foo'), 'not unlocked again';
   ok $minion->lock('foo', -3600), 'locked';
   ok $minion->lock('foo', 0),     'locked again';
-  SKIP: {
-    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
-    ok !$minion->is_locked('foo'), 'lock does not exist';
-  }
+  ok !$minion->is_locked('foo'), 'lock does not exist';
   ok $minion->lock('foo', 3600), 'locked again';
-  SKIP: {
-    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
-    ok $minion->is_locked('foo'), 'lock exists';
-  }
+  ok $minion->is_locked('foo'), 'lock exists';
   ok !$minion->lock('foo', -3600), 'not locked again';
   ok !$minion->lock('foo', 3600),  'not locked again';
   ok $minion->unlock('foo'), 'unlocked';
@@ -297,10 +291,7 @@ subtest 'Exclusive lock' => sub {
 subtest 'Shared lock' => sub {
   ok $minion->lock('bar', 3600, {limit => 3}), 'locked';
   ok $minion->lock('bar', 3600, {limit => 3}), 'locked again';
-  SKIP: {
-    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
-    ok $minion->is_locked('bar'), 'lock exists';
-  }
+  ok $minion->is_locked('bar'), 'lock exists';
   ok $minion->lock('bar', -3600, {limit => 3}), 'locked again';
   ok $minion->lock('bar', 3600,  {limit => 3}), 'locked again';
   ok !$minion->lock('bar', 3600, {limit => 2}), 'not locked again';
@@ -311,10 +302,7 @@ subtest 'Shared lock' => sub {
   ok $minion->unlock('bar'), 'unlocked again';
   ok $minion->unlock('bar'), 'unlocked again';
   ok !$minion->unlock('bar'),    'not unlocked again';
-  SKIP: {
-    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
-    ok !$minion->is_locked('bar'), 'lock does not exist';
-  }
+  ok !$minion->is_locked('bar'), 'lock does not exist';
   ok $minion->unlock('baz'), 'unlocked';
   ok !$minion->unlock('baz'), 'not unlocked again';
 };
@@ -969,36 +957,61 @@ subtest 'Multiple attempts while processing' => sub {
   is $minion->backoff->(5),  640,    'right result';
   is $minion->backoff->(25), 390640, 'right result';
   SKIP: {
-    skip 'Minion workers do not support fork emulation', 19 if HAS_PSEUDOFORK;
-    my $id = $minion->enqueue(exit => [] => {attempts => 2});
+    skip 'Minion workers do not support fork emulation', 31 if HAS_PSEUDOFORK;
+
+    my $id = $minion->enqueue(exit => [] => {attempts => 3});
     my $worker = $minion->worker->register;
     ok my $job = $worker->dequeue(0), 'job dequeued';
     is $job->id, $id, 'right id';
     is $job->retries, 0, 'job has not been retried';
-    $job->perform;
     my $info = $job->info;
-    is $info->{attempts}, 2,          'job will be attempted twice';
+    is $info->{attempts}, 3,        'three attempts';
+    is $info->{state},    'active', 'right state';
+    $job->perform;
+    $info = $job->info;
+    is $info->{attempts}, 2,          'two attempts';
     is $info->{state},    'inactive', 'right state';
     ok $info->{result},   'error message in result';
     ok $info->{retried} < $info->{delayed}, 'delayed timestamp';
+
+    $minion->backend->sqlite->db->query(
+      q{update minion_jobs set delayed = datetime('now') where id = ?}, $id);
+    ok $job = $worker->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    is $job->retries, 1, 'job has been retried';
+    $info = $job->info;
+    is $info->{attempts}, 2,        'two attempts';
+    is $info->{state},    'active', 'right state';
+    $job->perform;
+    $info = $job->info;
+    is $info->{attempts}, 1,          'one attempt';
+    is $info->{state},    'inactive', 'right state';
+
     $minion->backend->sqlite->db->query(
       q{update minion_jobs set delayed = datetime('now') where id = ?}, $id);
     ok $job = $worker->register->dequeue(0), 'job dequeued';
     is $job->id, $id, 'right id';
-    is $job->retries, 1, 'job has been retried once';
+    is $job->retries, 2, 'two retries';
+    $info = $job->info;
+    is $info->{attempts}, 1,        'one attempt';
+    is $info->{state},    'active', 'right state';
     $job->perform;
     $info = $job->info;
-    is $info->{attempts}, 2,        'job will be attempted twice';
+    is $info->{attempts}, 1,        'one attempt';
     is $info->{state},    'failed', 'right state';
     ok $info->{result},   'error message in result';
-    ok $job->retry({attempts => 3}), 'job retried';
+
+    ok $job->retry({attempts => 2}), 'job retried';
     ok $job = $worker->register->dequeue(0), 'job dequeued';
     is $job->id, $id, 'right id';
     $job->perform;
-    $info = $job->info;
-    is $info->{attempts}, 3,        'job will be attempted three times';
-    is $info->{state},    'failed', 'right state';
-    ok $info->{result},   'error message in result';
+    is $job->info->{state}, 'inactive', 'right state';
+    $minion->backend->sqlite->db->query(
+      q{update minion_jobs set delayed = datetime('now') where id = ?}, $id);
+    ok $job = $worker->register->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    $job->perform;
+    is $job->info->{state}, 'failed', 'right state';
     $worker->unregister;
   }
 };
