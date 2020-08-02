@@ -47,18 +47,15 @@ sub dequeue {
 sub enqueue {
   my ($self, $task, $args, $options) = (shift, shift, shift || [], shift || {});
 
-  my $db = $self->sqlite->db;
-  return _enqueue($db, $task, $args, $options) unless my $seq = $options->{sequence};
-
-  my $tx = $db->begin('exclusive');
-  my $prev = $db->query(
-    q{select id from minion_jobs where sequence = ? and next is null limit 1}, $seq)
-    ->hashes->first;
-  unshift @{$options->{parents}}, $prev->{id} if $prev;
-  my $id = _enqueue($db, $task, $args, $options);
-  $db->query(q{update minion_jobs set next = ? where id = ?}, $id, $prev->{id}) if $prev;
-  $tx->commit;
-  return $id;
+  return $self->sqlite->db->query(
+    q{insert into minion_jobs
+       (args, attempts, delayed, notes, parents, priority, queue, task)
+      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?, ?, ?)},
+    {json => $args}, $options->{attempts} // 1,
+    $options->{delay} // 0, {json => $options->{notes} || {}},
+    {json => ($options->{parents} || [])}, $options->{priority} // 0,
+    $options->{queue} // 'default', $task
+  )->last_insert_id;
 }
 
 sub fail_job   { shift->_update(1, @_) }
@@ -122,11 +119,6 @@ sub list_jobs {
     push @where, @$queues ? "queue in ($queues_in)" : 'queue is null';
     push @where_params, @$queues;
   }
-  if (defined(my $sequences = $options->{sequences})) {
-    my $sequences_in = join ',', ('?')x@$sequences;
-    push @where, @$sequences ? "sequence in ($sequences_in)" : 'sequence is null';
-    push @where_params, @$sequences;
-  }
   if (defined(my $states = $options->{states})) {
     my $states_in = join ',', ('?')x@$states;
     push @where, @$states ? "state in ($states_in)" : 'state is null';
@@ -146,10 +138,9 @@ sub list_jobs {
          from minion_jobs as child, json_each(child.parents) as parent_id
          where j.id = parent_id.value) as children,
        strftime('%s',created) as created, strftime('%s',delayed) as delayed,
-       strftime('%s',finished) as finished, next, notes, parents,
-       (select id from minion_jobs where sequence = j.sequence and next = j.id) as previous,
+       strftime('%s',finished) as finished, notes, parents,
        priority, queue, result, strftime('%s',retried) as retried, retries,
-       sequence, strftime('%s',started) as started, state, task,
+       strftime('%s',started) as started, state, task,
        strftime('%s','now') as time, worker
        from minion_jobs as j
        $where_str order by id desc limit ? offset ?},
@@ -396,20 +387,6 @@ sub unregister_worker {
   shift->sqlite->db->query('delete from minion_workers where id = ?', shift);
 }
 
-sub _enqueue {
-  my ($db, $task, $args, $options) = @_;
-
-  return $db->query(
-    q{insert into minion_jobs
-       (args, attempts, delayed, notes, parents, priority, queue, sequence, task)
-      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?, ?, ?, ?)},
-    {json => $args}, $options->{attempts} // 1,
-    $options->{delay} // 0, {json => $options->{notes} || {}},
-    {json => ($options->{parents} || [])}, $options->{priority} // 0,
-    $options->{queue} // 'default', $options->{sequence}, $task
-  )->last_insert_id;
-}
-
 sub _try {
   my ($self, $id, $options) = @_;
 
@@ -650,14 +627,6 @@ Job priority, defaults to C<0>. Jobs with a higher priority get performed first.
 
 Queue to put job in, defaults to C<default>.
 
-=item sequence
-
-  sequence => 'host:mojolicious.org'
-
-Sequence this job belongs to. The previous job from the sequence will be
-automatically added as a parent to continue the sequence. Note that this option
-is B<EXPERIMENTAL> and might change without warning!
-
 =back
 
 =head2 fail_job
@@ -737,13 +706,6 @@ List only jobs with these ids.
 
 List only jobs in these queues.
 
-=item sequences
-
-  sequences => ['host:localhost', 'host:mojolicious.org']
-
-List only jobs from these sequences. Note that this option is B<EXPERIMENTAL>
-and might change without warning!
-
 =item states
 
   states => ['inactive', 'active']
@@ -804,12 +766,6 @@ Epoch time job was finished.
 
 Job id.
 
-=item next
-
-  next => 10024
-
-Next job in sequence.
-
 =item notes
 
   notes => {foo => 'bar', baz => [1, 2, 3]}
@@ -821,12 +777,6 @@ Hash reference with arbitrary metadata for this job.
   parents => ['10023', '10024', '10025']
 
 Jobs this job depends on.
-
-=item previous
-
-  previous => 10022
-
-Previous job in sequence.
 
 =item priority
 
@@ -857,12 +807,6 @@ Epoch time job has been retried.
   retries => 3
 
 Number of times job has been retried.
-
-=item sequence
-
-  sequence => 'host:mojolicious.org'
-
-Sequence name.
 
 =item started
 
@@ -1357,3 +1301,33 @@ alter table minion_jobs add column sequence text;
 alter table minion_jobs add column next integer;
 create unique index minion_jobs_next on minion_jobs (next);
 create index minion_jobs_sequence_next on minion_jobs (sequence, next);
+
+-- 10 up
+create table minion_jobs_NEW (
+  id       integer not null primary key autoincrement,
+  args     text not null,
+  created  text not null default current_timestamp,
+  delayed  text not null,
+  finished text,
+  priority integer not null,
+  result   text,
+  retried  text,
+  retries  integer not null default 0,
+  started  text,
+  state    text not null default 'inactive',
+  task     text not null,
+  worker   integer,
+  queue    text not null default 'default',
+  attempts integer not null default 1,
+  parents  text not null default '[]',
+  notes    text not null
+    check(json_valid(notes) and json_type(notes) = 'object') default '{}'
+);
+insert into minion_jobs_NEW
+  (id,args,created,delayed,finished,priority,result,retried,retries,
+  started,state,task,worker,queue,attempts,parents,notes)
+  select id,args,created,delayed,finished,priority,result,retried,retries,
+  started,state,task,worker,queue,attempts,parents,notes from minion_jobs;
+drop table minion_jobs;
+alter table minion_jobs_NEW rename to minion_jobs;
+create index if not exists minion_jobs_state_priority_id on minion_jobs (state, priority desc, id);

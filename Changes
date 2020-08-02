@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Remove experimental support for job sequences, and next and previous fields from list_jobs method.
 
 v5.0.2    2020-07-23 00:30:45 EDT
   - Minion requirement bumped to 10.10.
