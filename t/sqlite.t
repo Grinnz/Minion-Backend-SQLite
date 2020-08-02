@@ -1129,7 +1129,7 @@ subtest 'Job dependencies' => sub {
   is $minion->repair->stats->{finished_jobs}, 2, 'two finished jobs';
   ok $job->finish, 'job finished';
   is $minion->stats->{finished_jobs}, 3, 'three finished jobs';
-  is $minion->repair->stats->{finished_jobs}, 0, 'no finished jobs';
+  is $minion->repair->remove_after(172800)->stats->{finished_jobs}, 0, 'no finished jobs';
   $id = $minion->enqueue(test => [] => {parents => [-1]});
   $job = $worker->dequeue(0);
   is $job->id, $id, 'right id';
@@ -1144,6 +1144,78 @@ subtest 'Job dependencies' => sub {
   is_deeply $job->info->{parents}, [-1, -2], 'right parents';
   ok $job->finish, 'job finished';
   $worker->unregister;
+};
+
+subtest 'Expiring jobs' => sub {
+  my $id = $minion->enqueue('test');
+  is $minion->job($id)->info->{expires}, undef, 'no expires timestamp';
+  $minion->job($id)->remove;
+
+  $id = $minion->enqueue('test' => [] => {expire => 300});
+  like $minion->job($id)->info->{expires}, qr/^[\d.]+$/, 'has expires timestamp';
+  SKIP: {
+    skip 'Minion workers do not support fork emulation', 35 if HAS_PSEUDOFORK;
+    my $worker = $minion->worker->register;
+    ok my $job = $worker->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    my $expires = $job->info->{expires};
+    like $expires, qr/^[\d.]+$/, 'has expires timestamp';
+    ok $job->finish, 'job finished';
+    ok $job->retry({expire => 600}), 'job retried';
+    my $info = $minion->job($id)->info;
+    is $info->{state},     'inactive',   'rigth state';
+    like $info->{expires}, qr/^[\d.]+$/, 'has expires timestamp';
+    isnt $info->{expires}, $expires, 'retried with new expires timestamp';
+    is $minion->repair->jobs({states => ['inactive']})->total, 1, 'job has not expired yet';
+    ok $job = $worker->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    ok $job->finish, 'job finished';
+
+    $id = $minion->enqueue('test' => [] => {expire => 300});
+    is $minion->repair->jobs({states => ['inactive']})->total, 1, 'job has not expired yet';
+    my $sql = $minion->backend->sqlite;
+    $sql->db->query(q{update minion_jobs set expires = datetime('now', '-1 day') where id = ?}, $id);
+    is $minion->jobs({states => ['inactive']})->total, 0, 'job has expired';
+    ok !$worker->dequeue(0), 'job has expired';
+    ok $sql->db->select('minion_jobs', '*', {id => $id})->hash, 'job still exists in database';
+    $minion->repair;
+    ok !$sql->db->select('minion_jobs', '*', {id => $id})->hash, 'job no longer exists in database';
+
+    $id = $minion->enqueue('test' => [] => {expire => 300});
+    ok $job = $worker->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    ok $job->finish, 'job finished';
+    $sql->db->query(q{update minion_jobs set expires = datetime('now', '-1 day') where id = ?}, $id);
+    $minion->repair;
+    ok $job = $minion->job($id), 'job still exists';
+    is $job->info->{state}, 'finished', 'right state';
+
+    $id = $minion->enqueue('test' => [] => {expire => 300});
+    ok $job = $worker->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    ok $job->fail, 'job failed';
+    $sql->db->query(q{update minion_jobs set expires = datetime('now', '-1 day') where id = ?}, $id);
+    $minion->repair;
+    ok $job = $minion->job($id), 'job still exists';
+    is $job->info->{state}, 'failed', 'right state';
+
+    $id = $minion->enqueue('test' => [] => {expire => 300});
+    ok $job = $worker->dequeue(0), 'job dequeued';
+    is $job->id, $id, 'right id';
+    $sql->db->query(q{update minion_jobs set expires = datetime('now', '-1 day') where id = ?}, $id);
+    $minion->repair;
+    ok $job = $minion->job($id), 'job still exists';
+    is $job->info->{state}, 'active', 'right state';
+    ok $job->finish, 'job finished';
+
+    $id = $minion->enqueue('test' => [] => {expire => 300});
+    my $id2 = $minion->enqueue('test' => [] => {parents => [$id]});
+    ok !$worker->dequeue(0, {id => $id2}), 'parent is still inactive';
+    $sql->db->query(q{update minion_jobs set expires = datetime('now', '-1 day') where id = ?}, $id);
+    ok $job = $worker->dequeue(0, {id => $id2}), 'parent has expired';
+    ok $job->finish, 'job finished';
+    $worker->unregister;
+  }
 };
 
 subtest 'Foreground' => sub {

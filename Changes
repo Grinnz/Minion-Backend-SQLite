@@ -1,5 +1,7 @@
 {{$NEXT}}
-  - Remove experimental support for job sequences, and next and previous fields from list_jobs method.
+  - Removed experimental support for job sequences, and next and previous fields from list_jobs method.
+  - Added EXPERIMENTAL expire option to enqueue method and expires field to list_jobs method to
+    support expiring jobs.
 
 v5.0.2    2020-07-23 00:30:45 EDT
   - Minion requirement bumped to 10.10.

@@ -49,10 +49,12 @@ sub enqueue {
 
   return $self->sqlite->db->query(
     q{insert into minion_jobs
-       (args, attempts, delayed, notes, parents, priority, queue, task)
-      values (?, ?, (datetime('now', ? || ' seconds')), ?, ?, ?, ?, ?)},
-    {json => $args}, $options->{attempts} // 1,
-    $options->{delay} // 0, {json => $options->{notes} || {}},
+       (args, attempts, delayed, expires, notes, parents, priority, queue, task)
+      values (?, ?, datetime('now', ? || ' seconds'),
+      case when ? is not null then datetime('now', ? || ' seconds') end,
+      ?, ?, ?, ?, ?)},
+    {json => $args}, $options->{attempts} // 1, $options->{delay} // 0,
+    @$options{qw(expire expire)}, {json => $options->{notes} || {}},
     {json => ($options->{parents} || [])}, $options->{priority} // 0,
     $options->{queue} // 'default', $task
   )->last_insert_id;
@@ -129,6 +131,7 @@ sub list_jobs {
     push @where, @$tasks ? "task in ($tasks_in)" : 'task is null';
     push @where_params, @$tasks;
   }
+  push @where, q{(state != 'inactive' or expires is null or expires > datetime('now'))};
 
   my $where_str = @where ? 'where ' . join(' and ', @where) : '';
 
@@ -138,8 +141,9 @@ sub list_jobs {
          from minion_jobs as child, json_each(child.parents) as parent_id
          where j.id = parent_id.value) as children,
        strftime('%s',created) as created, strftime('%s',delayed) as delayed,
-       strftime('%s',finished) as finished, notes, parents,
-       priority, queue, result, strftime('%s',retried) as retried, retries,
+       strftime('%s',expires) as expires, strftime('%s',finished) as finished,
+       notes, parents, priority, queue, result,
+       strftime('%s',retried) as retried, retries,
        strftime('%s',started) as started, state, task,
        strftime('%s','now') as time, worker
        from minion_jobs as j
@@ -293,6 +297,15 @@ sub repair {
       where notified < datetime('now', '-' || ? || ' seconds')}, $minion->missing_after
   );
 
+  # Old jobs with no unresolved dependencies and expired jobs
+  $db->query(
+    q{delete from minion_jobs
+      where (finished <= datetime('now', '-' || ? || ' seconds')
+      and state = 'finished' and id not in (select distinct parent_id.value
+        from minion_jobs as child, json_each(child.parents) as parent_id
+        where child.state <> 'finished'))
+      or (expires <= datetime('now') and state = 'inactive')}, $minion->remove_after);
+
   # Jobs with missing worker (can be retried)
   my $fail = $db->query(
     q{select id, retries from minion_jobs as j
@@ -306,14 +319,6 @@ sub repair {
     q{update minion_jobs set state = 'failed', result = json_quote('Job appears stuck in queue')
       where state = 'inactive' and delayed < datetime('now', '-' || ? || ' seconds')},
     $minion->stuck_after);
-
-  # Old jobs with no unresolved dependencies
-  $db->query(
-    q{delete from minion_jobs
-      where finished <= datetime('now', '-' || ? || ' seconds')
-      and state = 'finished' and id not in (select distinct parent_id.value
-        from minion_jobs as child, json_each(child.parents) as parent_id
-        where child.state <> 'finished')}, $minion->remove_after);
 }
 
 sub reset {
@@ -340,13 +345,14 @@ sub retry_job {
   return !!$self->sqlite->db->query(
     q{update minion_jobs
       set attempts = coalesce(?, attempts),
-        delayed = (datetime('now', ? || ' seconds')),
+        delayed = datetime('now', ? || ' seconds'),
+        expires = case when ? is not null then datetime('now', ? || ' seconds') else expires end,
         parents = coalesce(?, parents), priority = coalesce(?, priority),
         queue = coalesce(?, queue), retried = datetime('now'),
         retries = retries + 1, state = 'inactive'
       where id = ? and retries = ?},
-    $options->{attempts}, $options->{delay} // 0, $parents,
-    @$options{qw(priority queue)}, $id, $retries
+    $options->{attempts}, $options->{delay} // 0, @$options{qw(expire expire)},
+    $parents, @$options{qw(priority queue)}, $id, $retries
   )->rows;
 }
 
@@ -354,7 +360,8 @@ sub stats {
   my $self = shift;
 
   my $stats = $self->sqlite->db->query(
-    q{select count(case state when 'inactive' then 1 end) as inactive_jobs,
+    q{select count(case when state = 'inactive' and (expires is null or expires > datetime('now'))
+        then 1 end) as inactive_jobs,
       count(case state when 'active' then 1 end) as active_jobs,
       count(case state when 'failed' then 1 end) as failed_jobs,
       count(case state when 'finished' then 1 end) as finished_jobs,
@@ -403,10 +410,10 @@ sub _try {
        where delayed <= datetime('now') and id = coalesce(?, id)
        and (json_array_length(parents) = 0 or not exists (
          select 1 from minion_jobs as parent, json_each(j.parents) as parent_id
-         where parent.id = parent_id.value
-         and parent.state in ('inactive', 'active', 'failed')
-       )) and queue in ($queues_in) and state = 'inactive'
-       and task in ($tasks_in)
+         where parent.id = parent_id.value and (parent.state in ('active', 'failed')
+         or (parent.state = 'inactive' and (parent.expires is null or parent.expires > datetime('now'))))
+       )) and queue in ($queues_in) and state = 'inactive' and task in ($tasks_in)
+       and (expires is null or expires > datetime('now'))
        order by priority desc, id
        limit 1}, $options->{id}, @$queues, @$tasks
   );
@@ -602,6 +609,13 @@ L<Minion/"backoff"> after the first attempt, defaults to C<1>.
 
 Delay job for this many seconds (from now).
 
+=item expire
+
+  expire => 300
+
+Job is valid for this many seconds (from now) before it expires. Note that this
+option is B<EXPERIMENTAL> and might change without warning!
+
 =item notes
 
   notes => {foo => 'bar', baz => [1, 2, 3]}
@@ -753,6 +767,12 @@ Epoch time job was created.
   delayed => 784111777
 
 Epoch time job was delayed to.
+
+=item expires
+
+  expires => 784111777
+
+Epoch time job is valid until before it expires.
 
 =item finished
 
@@ -1081,6 +1101,13 @@ Number of times performing this job will be attempted.
 
 Delay job for this many seconds (from now).
 
+=item expire
+
+  expire => 300
+
+Job is valid for this many seconds (from now) before it expires. Note that this
+option is B<EXPERIMENTAL> and might change without warning!
+
 =item parents
 
   parents => [$id1, $id2, $id3]
@@ -1321,7 +1348,8 @@ create table minion_jobs_NEW (
   attempts integer not null default 1,
   parents  text not null default '[]',
   notes    text not null
-    check(json_valid(notes) and json_type(notes) = 'object') default '{}'
+    check(json_valid(notes) and json_type(notes) = 'object') default '{}',
+  expires  text
 );
 insert into minion_jobs_NEW
   (id,args,created,delayed,finished,priority,result,retried,retries,
@@ -1331,3 +1359,4 @@ insert into minion_jobs_NEW
 drop table minion_jobs;
 alter table minion_jobs_NEW rename to minion_jobs;
 create index if not exists minion_jobs_state_priority_id on minion_jobs (state, priority desc, id);
+create index minion_jobs_expires on minion_jobs (expires);
