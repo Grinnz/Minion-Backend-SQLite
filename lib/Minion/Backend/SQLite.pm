@@ -49,12 +49,12 @@ sub enqueue {
 
   return $self->sqlite->db->query(
     q{insert into minion_jobs
-       (args, attempts, delayed, expires, notes, parents, priority, queue, task)
+       (args, attempts, delayed, expires, lax, notes, parents, priority, queue, task)
       values (?, ?, datetime('now', ? || ' seconds'),
       case when ? is not null then datetime('now', ? || ' seconds') end,
-      ?, ?, ?, ?, ?)},
+      ?, ?, ?, ?, ?, ?)},
     {json => $args}, $options->{attempts} // 1, $options->{delay} // 0,
-    @$options{qw(expire expire)}, {json => $options->{notes} || {}},
+    @$options{qw(expire expire)}, $options->{lax} ? 1 : 0, {json => $options->{notes} || {}},
     {json => ($options->{parents} || [])}, $options->{priority} // 0,
     $options->{queue} // 'default', $task
   )->last_insert_id;
@@ -142,7 +142,7 @@ sub list_jobs {
          where j.id = parent_id.value) as children,
        strftime('%s',created) as created, strftime('%s',delayed) as delayed,
        strftime('%s',expires) as expires, strftime('%s',finished) as finished,
-       notes, parents, priority, queue, result,
+       lax, notes, parents, priority, queue, result,
        strftime('%s',retried) as retried, retries,
        strftime('%s',started) as started, state, task,
        strftime('%s','now') as time, worker
@@ -347,11 +347,12 @@ sub retry_job {
       set attempts = coalesce(?, attempts),
         delayed = datetime('now', ? || ' seconds'),
         expires = case when ? is not null then datetime('now', ? || ' seconds') else expires end,
-        parents = coalesce(?, parents), priority = coalesce(?, priority),
+        lax = coalesce(?, lax), parents = coalesce(?, parents), priority = coalesce(?, priority),
         queue = coalesce(?, queue), retried = datetime('now'),
         retries = retries + 1, state = 'inactive'
       where id = ? and retries = ?},
     $options->{attempts}, $options->{delay} // 0, @$options{qw(expire expire)},
+    exists $options->{lax} ? $options->{lax} ? 1 : 0 : undef,
     $parents, @$options{qw(priority queue)}, $id, $retries
   )->rows;
 }
@@ -410,8 +411,10 @@ sub _try {
        where delayed <= datetime('now') and id = coalesce(?, id)
        and (json_array_length(parents) = 0 or not exists (
          select 1 from minion_jobs as parent, json_each(j.parents) as parent_id
-         where parent.id = parent_id.value and (parent.state in ('active', 'failed')
-         or (parent.state = 'inactive' and (parent.expires is null or parent.expires > datetime('now'))))
+         where parent.id = parent_id.value and (
+           parent.state = 'active' or (parent.state = 'failed' and not j.lax)
+           or (parent.state = 'inactive' and (parent.expires is null or parent.expires > datetime('now')))
+         )
        )) and queue in ($queues_in) and state = 'inactive' and task in ($tasks_in)
        and (expires is null or expires > datetime('now'))
        order by priority desc, id
@@ -613,6 +616,14 @@ Delay job for this many seconds (from now).
 Job is valid for this many seconds (from now) before it expires. Note that this
 option is B<EXPERIMENTAL> and might change without warning!
 
+=item lax
+
+  lax => 1
+
+Existing jobs this job depends on may also have transitioned to the C<failed>
+state to allow for it to be processed, defaults to C<false>. Note that this
+option is B<EXPERIMENTAL> and might change without warning!
+
 =item notes
 
   notes => {foo => 'bar', baz => [1, 2, 3]}
@@ -782,6 +793,13 @@ Epoch time job was finished.
   id => 10025
 
 Job id.
+
+=item lax
+
+  lax => 0
+
+Existing jobs this job depends on may also have failed to allow for it to be
+processed.
 
 =item notes
 
@@ -1105,6 +1123,14 @@ Delay job for this many seconds (from now).
 Job is valid for this many seconds (from now) before it expires. Note that this
 option is B<EXPERIMENTAL> and might change without warning!
 
+=item lax
+
+  lax => 1
+
+Existing jobs this job depends on may also have transitioned to the C<failed>
+state to allow for it to be processed, defaults to C<false>. Note that this
+option is B<EXPERIMENTAL> and might change without warning!
+
 =item parents
 
   parents => [$id1, $id2, $id3]
@@ -1346,7 +1372,8 @@ create table minion_jobs_NEW (
   parents  text not null default '[]',
   notes    text not null
     check(json_valid(notes) and json_type(notes) = 'object') default '{}',
-  expires  text
+  expires  text,
+  lax      boolean not null default 0
 );
 insert into minion_jobs_NEW
   (id,args,created,delayed,finished,priority,result,retried,retries,

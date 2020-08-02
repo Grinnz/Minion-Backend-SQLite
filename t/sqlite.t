@@ -1188,6 +1188,56 @@ subtest 'Job dependencies' => sub {
   $worker->unregister;
 };
 
+subtest 'Job dependencies (lax)' => sub {
+  plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
+  my $worker = $minion->worker->register;
+  my $id     = $minion->enqueue('test');
+  my $id2    = $minion->enqueue('test');
+  my $id3    = $minion->enqueue(test => [] => {lax => 1, parents => [$id, $id2]});
+  ok my $job = $worker->dequeue(0), 'job dequeued';
+  is $job->id, $id, 'right id';
+  is_deeply $job->info->{children}, [$id3], 'right children';
+  is_deeply $job->info->{parents}, [], 'right parents';
+  ok my $job2 = $worker->dequeue(0), 'job dequeued';
+  is $job2->id, $id2, 'right id';
+  is_deeply $job2->info->{children}, [$id3], 'right children';
+  is_deeply $job2->info->{parents}, [], 'right parents';
+  ok !$worker->dequeue(0), 'parents are not ready yet';
+  ok $job->finish, 'job finished';
+  ok !$worker->dequeue(0), 'parents are not ready yet';
+  ok $job2->fail, 'job failed';
+  ok my $job3 = $worker->dequeue(0), 'job dequeued';
+  is $job3->id, $id3, 'right id';
+  is_deeply $job3->info->{children}, [], 'right children';
+  is_deeply $job3->info->{parents}, [$id, $id2], 'right parents';
+  ok $job3->finish, 'job finished';
+
+  my $id4 = $minion->enqueue('test');
+  my $id5 = $minion->enqueue(test => [] => {parents => [$id4]});
+  ok my $job4 = $worker->dequeue(0), 'job dequeued';
+  is $job4->id, $id4, 'right id';
+  ok !$worker->dequeue(0), 'parents are not ready yet';
+  ok $job4->fail, 'job finished';
+  ok !$worker->dequeue(0), 'parents are not ready yet';
+  ok $minion->job($id5)->retry({lax => 1}), 'job is now lax';
+  ok my $job5 = $worker->dequeue(0), 'job dequeued';
+  is $job5->id, $id5, 'right id';
+  is_deeply $job5->info->{children}, [], 'right children';
+  is_deeply $job5->info->{parents}, [$id4], 'right parents';
+  ok $job5->finish, 'job finished';
+  ok $job4->remove, 'job removed';
+
+  is $minion->jobs({ids => [$id5]})->next->{lax}, 1, 'lax';
+  ok $minion->job($id5)->retry, 'job is still lax';
+  is $minion->jobs({ids => [$id5]})->next->{lax}, 1, 'lax';
+  ok $minion->job($id5)->retry({lax => 0}), 'job is not lax anymore';
+  is $minion->jobs({ids => [$id5]})->next->{lax}, 0, 'not lax';
+  ok $minion->job($id5)->retry, 'job is still not lax';
+  is $minion->jobs({ids => [$id5]})->next->{lax}, 0, 'not lax';
+  ok $minion->job($id5)->remove, 'job removed';
+  $worker->unregister;
+};
+
 subtest 'Expiring jobs' => sub {
   my $id = $minion->enqueue('test');
   is $minion->job($id)->info->{expires}, undef, 'no expires timestamp';
