@@ -276,7 +276,16 @@ subtest 'Exclusive lock' => sub {
   ok $minion->unlock('foo'), 'unlocked';
   ok !$minion->unlock('foo'), 'not unlocked again';
   ok $minion->lock('foo', -3600), 'locked';
-  ok $minion->lock('foo', 3600),  'locked again';
+  ok $minion->lock('foo', 0),     'locked again';
+  SKIP: {
+    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
+    ok !$minion->is_locked('foo'), 'lock does not exist';
+  }
+  ok $minion->lock('foo', 3600), 'locked again';
+  SKIP: {
+    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
+    ok $minion->is_locked('foo'), 'lock exists';
+  }
   ok !$minion->lock('foo', -3600), 'not locked again';
   ok !$minion->lock('foo', 3600),  'not locked again';
   ok $minion->unlock('foo'), 'unlocked';
@@ -286,8 +295,12 @@ subtest 'Exclusive lock' => sub {
 };
 
 subtest 'Shared lock' => sub {
-  ok $minion->lock('bar', 3600,  {limit => 3}), 'locked';
-  ok $minion->lock('bar', 3600,  {limit => 3}), 'locked again';
+  ok $minion->lock('bar', 3600, {limit => 3}), 'locked';
+  ok $minion->lock('bar', 3600, {limit => 3}), 'locked again';
+  SKIP: {
+    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
+    ok $minion->is_locked('bar'), 'lock exists';
+  }
   ok $minion->lock('bar', -3600, {limit => 3}), 'locked again';
   ok $minion->lock('bar', 3600,  {limit => 3}), 'locked again';
   ok !$minion->lock('bar', 3600, {limit => 2}), 'not locked again';
@@ -297,7 +310,11 @@ subtest 'Shared lock' => sub {
   ok $minion->unlock('bar'), 'unlocked again';
   ok $minion->unlock('bar'), 'unlocked again';
   ok $minion->unlock('bar'), 'unlocked again';
-  ok !$minion->unlock('bar'), 'not unlocked again';
+  ok !$minion->unlock('bar'),    'not unlocked again';
+  SKIP: {
+    skip 'is_locked requires Minion 10.13', 1 unless eval { Minion->VERSION('10.13'); 1 };
+    ok !$minion->is_locked('bar'), 'lock does not exist';
+  }
   ok $minion->unlock('baz'), 'unlocked';
   ok !$minion->unlock('baz'), 'not unlocked again';
 };
