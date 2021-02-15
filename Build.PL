@@ -92,7 +92,7 @@ EOW
         "List::Util" => 0,
         "Minion" => "10.13",
         "Mojo::SQLite" => "3.000",
-        "Mojolicious" => "7.29",
+        "Mojolicious" => "7.49",
         "Sys::Hostname" => 0,
         "Time::HiRes" => 0,
         "perl" => "5.010001"
