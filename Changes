@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Support min_priority option in dequeue method.
   - Update IRC metadata to libera.chat
 
 v5.0.4    2021-02-16 13:30:11 EST
