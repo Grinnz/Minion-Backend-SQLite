@@ -371,10 +371,10 @@ sub stats {
       (select count(*) from minion_locks where expires > datetime('now')) as active_locks,
       (select count(distinct(worker)) from minion_jobs where state = 'active') as active_workers,
       ifnull((select seq from sqlite_sequence where name = 'minion_jobs'), 0) as enqueued_jobs,
-      (select count(*) from minion_workers) as inactive_workers,
+      (select count(*) from minion_workers) as workers,
       null as uptime}
   )->hash;
-  $stats->{inactive_workers} -= $stats->{active_workers};
+  $stats->{inactive_workers} = $stats->{workers} - $stats->{active_workers};
 
   return $stats;
 }
@@ -1225,6 +1225,12 @@ Number of workers that are currently not processing a job.
   uptime => undef
 
 Uptime in seconds. Always undefined for SQLite.
+
+=item workers
+
+  workers => 200;
+
+Number of registered workers.
 
 =back
 
