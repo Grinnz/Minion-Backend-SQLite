@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Add workers field to stats method (#21, Oliver Kurz)
 
 v5.0.6    2021-11-12 19:39:19 EST
   - Improve efficiency of stats query (#19, Sebastian Riedel)
