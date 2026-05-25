@@ -397,7 +397,7 @@ sub _try {
 
   my $db = $self->sqlite->db;
   my $queues = $options->{queues} || ['default'];
-  my $tasks = [keys %{$self->minion->tasks}];
+  my $tasks = $options->{tasks} || [keys %{$self->minion->tasks}];
   return undef unless @$queues and @$tasks;
   my $queues_in = join ',', ('?')x@$queues;
   my $tasks_in = join ',', ('?')x@$tasks;
@@ -555,6 +555,12 @@ Do not dequeue jobs with a lower priority.
   queues => ['important']
 
 One or more queues to dequeue jobs from, defaults to C<default>.
+
+=item tasks
+
+  tasks => ['foo', 'bar']
+
+One or more tasks to dequeue jobs for, defaults to all tasks.
 
 =back
 

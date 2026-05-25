@@ -797,6 +797,32 @@ subtest 'Delayed jobs' => sub {
   }
 };
 
+subtest 'Task limits' => sub {
+  plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
+  my $id     = $minion->enqueue('foo');
+  my $id2    = $minion->enqueue('foo');
+  my $id3    = $minion->enqueue('bar');
+  my $id4    = $minion->enqueue('baz');
+  my $id5    = $minion->enqueue('bar');
+  my $worker = $minion->worker->register;
+  ok my $job = $worker->dequeue(0, {tasks => ['foo', 'bar', 'baz']}), 'job dequeued';
+  is $job->id, $id, 'right id';
+  ok $job->finish,                                   'job finished';
+  ok $job = $worker->dequeue(0, {tasks => ['bar']}), 'job dequeued';
+  is $job->id, $id3, 'right id';
+  ok $job->finish,                                          'job finished';
+  ok $job = $worker->dequeue(0, {tasks => ['bar', 'baz']}), 'job dequeued';
+  is $job->id, $id4, 'right id';
+  ok $job->finish,                                          'job finished';
+  ok $job = $worker->dequeue(0, {tasks => ['bar', 'baz']}), 'job dequeued';
+  is $job->id, $id5, 'right id';
+  ok $job->finish,                                                 'job finished';
+  ok $job = $worker->dequeue(0, {tasks => ['foo', 'bar', 'baz']}), 'job dequeued';
+  is $job->id, $id2, 'right id';
+  ok $job->finish, 'job finished';
+  $worker->unregister;
+};
+
 subtest 'Events' => sub {
   plan skip_all => 'Minion workers do not support fork emulation' if HAS_PSEUDOFORK;
   my ($enqueue, $pid_start, $pid_stop);
