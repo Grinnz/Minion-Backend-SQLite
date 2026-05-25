@@ -33,6 +33,28 @@ subtest 'Basics' => sub {
   is_deeply $minion->job($id)->info->{result}, {just => 'works!'}, 'right result';
 };
 
+subtest 'Dispatch schedules' => sub {
+  my $sid = $minion->schedule(due_now => '0 4 * * *' => 'test');
+  $minion->backend->sqlite->db->query(q{update minion_schedules set next_run = datetime('now', '-1 minutes') where id = ?},
+    $sid);
+
+  my $worker = $minion->worker;
+  $worker->status->{dequeue_timeout} = 0;
+  $worker->on(
+    dequeue => sub {
+      my ($worker, $job) = @_;
+      $job->on(reap => sub { kill 'INT', $$ });
+    }
+  );
+  $worker->run;
+
+  my $info = $minion->list_schedules(0, 10, {ids => [$sid]})->{schedules}[0];
+  ok $info->{last_job}, 'schedule fired';
+  is_deeply $minion->job($info->{last_job})->info->{result}, {just => 'works!'}, 'right result';
+
+  $minion->unschedule('due_now');
+};
+
 subtest 'Task limit' => sub {
   $minion->add_task(
     $_ => sub {
