@@ -1,4 +1,5 @@
 {{$NEXT}}
+  - Support returning lock ID in list_locks method.
 
 v5.0.7    2022-08-13 13:00:35 EDT
   - Add workers field to stats method (#21, Oliver Kurz)

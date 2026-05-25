@@ -171,7 +171,7 @@ sub list_locks {
   my $where_str = 'where ' . join(' and ', @where);
   
   my $locks = $self->sqlite->db->query(
-    qq{select name, strftime('%s',expires) as expires from minion_locks
+    qq{select id, name, strftime('%s',expires) as expires from minion_locks
        $where_str order by id desc limit ? offset ?},
     @where_params, $limit, $offset
   )->hashes->to_array;
@@ -646,6 +646,8 @@ transitioned to the state C<finished> before it can be processed.
   priority => 5
 
 Job priority, defaults to C<0>. Jobs with a higher priority get performed first.
+Priorities can be positive or negative, but should be in the range between
+C<100> and C<-100>.
 
 =item queue
 
@@ -914,6 +916,12 @@ These fields are currently available:
   expires => 784111777
 
 Epoch time this lock will expire.
+
+=item id
+
+  id => 1
+
+Lock id.
 
 =item name
 
