@@ -969,11 +969,12 @@ subtest 'Nested data structures' => sub {
   is $job->info->{state}, 'finished', 'right state';
   ok $job->note(yada => ['works']), 'added metadata';
   ok !$minion->backend->note(-1, {yada => ['failed']}), 'not added metadata';
-  my $notes = {foo => [4, 5, 6], bar  => {baz => [1, 2, 3]}, baz  => 'yada', yada => ['works']};
+  my $pid = $job->info->{notes}{minion_pid};
+  my $notes = {foo => [4, 5, 6], bar  => {baz => [1, 2, 3]}, baz  => 'yada', yada => ['works'], minion_pid => $pid};
   is_deeply $job->info->{notes}, $notes, 'right metadata';
   is_deeply $job->info->{result}, [{23 => 'testtesttest'}], 'right structure';
   ok $job->note(yada => undef, bar => undef), 'removed metadata';
-  $notes = {foo => [4, 5, 6], baz => 'yada'};
+  $notes = {foo => [4, 5, 6], baz => 'yada', minion_pid => $pid};
   is_deeply $job->info->{notes}, $notes, 'right metadata';
   $worker->unregister;
 };
