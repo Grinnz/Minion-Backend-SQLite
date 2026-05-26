@@ -1,6 +1,6 @@
 runtime:
   requires:
-    perl: '5.010001'
+    perl: '5.020'
     DBD::SQLite: '1.68'
     List::Util: 0
     Minion: '12.0'
