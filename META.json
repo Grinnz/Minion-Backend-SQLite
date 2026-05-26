@@ -79,7 +79,10 @@
          "url" : "https://github.com/Grinnz/Minion-Backend-SQLite.git",
          "web" : "https://github.com/Grinnz/Minion-Backend-SQLite"
       },
-      "x_IRC" : "ircs://irc.libera.chat/#mojo"
+      "x_IRC" : {
+         "url" : "irc://irc.libera.org/#mojo",
+         "web" : "https://web.libera.chat/#mojo"
+      }
    },
    "version" : "v6.0.0",
    "x_contributors" : [
@@ -91,6 +94,7 @@
    ],
    "x_generated_by_perl" : "v5.42.1",
    "x_serialization_backend" : "Cpanel::JSON::XS version 4.40",
-   "x_spdx_expression" : "Artistic-2.0"
+   "x_spdx_expression" : "Artistic-2.0",
+   "x_static_install" : 1
 }
 
